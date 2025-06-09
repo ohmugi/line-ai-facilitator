@@ -1,0 +1,11 @@
+# Node modules
+node_modules/
+
+# 環境変数ファイル（OpenAIやLINEの秘密鍵）
+.env
+
+# OS固有ファイル
+.DS_Store
+
+# npm logs
+npm-debug.log*
