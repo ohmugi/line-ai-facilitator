@@ -57,4 +57,12 @@ app.post('/webhook', middleware(config), async (req, res) => {
 
   res.sendStatus(200);
 });
+events.forEach(async (event) => {
+  console.log('📦 Full event:', JSON.stringify(event, null, 2)); // ← 追加
+
+  if (event.type === 'message' && event.message.type === 'text') {
+    console.log('🪪 userId:', event.source.userId); // ← 本来の目的
+    // ...
+  }
+});
 
