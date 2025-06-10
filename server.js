@@ -42,3 +42,17 @@ async function generateReply(userText) {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
+app.post('/webhook', (req, res) => {
+  const events = req.body.events;
+  events.forEach(async (event) => {
+    if (event.type === 'message' && event.message.type === 'text') {
+      console.log('🪪 userId:', event.source.userId); // ← これを追加
+
+      // ここから先は既存の応答処理
+      const userMessage = event.message.text;
+
+      // （OpenAI応答やReply APIのコード）
+    }
+  });
+  res.sendStatus(200);
+});
