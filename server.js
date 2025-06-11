@@ -46,17 +46,21 @@ app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events;
 
   events.forEach(async (event) => {
+    // 全体の内容をデバッグ出力（userIdの構造確認用）
+    console.log('📦 Full event:', JSON.stringify(event, null, 2));
+
     if (event.type === 'message' && event.message.type === 'text') {
-      console.log('🪪 userId:', event.source.userId); // ★ここが大事！
+      console.log('🪪 userId:', event.source.userId);
 
       const userMessage = event.message.text;
 
-      // OpenAIなどの応答処理...
+      // ここにOpenAI処理などが続く
     }
   });
 
   res.sendStatus(200);
 });
+
 events.forEach(async (event) => {
   console.log('📦 Full event:', JSON.stringify(event, null, 2)); // ← 追加
 
