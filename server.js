@@ -36,8 +36,6 @@ app.post('/webhook', middleware(config), async (req, res) => {
   res.sendStatus(200);
 });
 
-  res.sendStatus(200);
-});
 
 async function generateReply(userText) {
   const response = await openai.chat.completions.create({
