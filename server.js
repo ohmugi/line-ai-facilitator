@@ -43,16 +43,18 @@ async function generateReply(userText) {
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
 app.post('/webhook', middleware(config), async (req, res) => {
-  const events = req.body.events; // ★ これが必要です！
+  const events = req.body.events; // ← 🔴 これが絶対必要！
 
   events.forEach(async (event) => {
+    // すべてのイベントをデバッグ出力（userId確認用）
     console.log('📦 Full event:', JSON.stringify(event, null, 2));
 
     if (event.type === 'message' && event.message.type === 'text') {
       console.log('🪪 userId:', event.source.userId);
 
       const userMessage = event.message.text;
-      // 応答処理（OpenAIなど）...
+
+      // ここにOpenAI処理やreply APIが続く（まだ未実装でもOK）
     }
   });
 
