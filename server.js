@@ -18,13 +18,23 @@ app.post('/webhook', middleware(config), async (req, res) => {
     console.log('📦 Full event:', JSON.stringify(event, null, 2));
 
     if (event.type === 'message' && event.message.type === 'text') {
-      console.log('🪪 userId:', event.source.userId);
-
       const userMessage = event.message.text;
+      const userId = event.source.userId;
 
-      // ★ここにAI応答などの処理を後で追加
+      console.log('🪪 userId:', userId);
+
+      // 🔁 仮：オウム返しで返信
+      await client.replyMessage(event.replyToken, [
+        {
+          type: 'text',
+          text: `あなたの発言：「${userMessage}」を受け取りました。`, // ※テスト用
+        },
+      ]);
     }
   });
+
+  res.sendStatus(200);
+});
 
   res.sendStatus(200);
 });
