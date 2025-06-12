@@ -6,28 +6,28 @@ const config = {
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.CHANNEL_SECRET,
 };
+
 const client = new Client(config);
 const app = express();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.post('/webhook', middleware(config), async (req, res) => {
-  const results = await Promise.all(req.body.events.map(handleEvent));
-  res.json(results);
-});
+  const events = req.body.events;
 
-async function handleEvent(event) {
-  if (event.type !== 'message' || event.message.type !== 'text') {
-    return Promise.resolve(null);
-  }
+  events.forEach(async (event) => {
+    console.log('📦 Full event:', JSON.stringify(event, null, 2));
 
-  const userText = event.message.text;
-  const reply = await generateReply(userText);
+    if (event.type === 'message' && event.message.type === 'text') {
+      console.log('🪪 userId:', event.source.userId);
 
-  return client.replyMessage(event.replyToken, {
-    type: 'text',
-    text: reply,
+      const userMessage = event.message.text;
+
+      // ★ここにAI応答などの処理を後で追加
+    }
   });
-}
+
+  res.sendStatus(200);
+});
 
 async function generateReply(userText) {
   const response = await openai.chat.completions.create({
@@ -42,31 +42,3 @@ async function generateReply(userText) {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
-app.post('/webhook', middleware(config), async (req, res) => {
-  const events = req.body.events; // ← 🔴 これが絶対必要！
-
-  events.forEach(async (event) => {
-    // すべてのイベントをデバッグ出力（userId確認用）
-    console.log('📦 Full event:', JSON.stringify(event, null, 2));
-
-    if (event.type === 'message' && event.message.type === 'text') {
-      console.log('🪪 userId:', event.source.userId);
-
-      const userMessage = event.message.text;
-
-      // ここにOpenAI処理やreply APIが続く（まだ未実装でもOK）
-    }
-  });
-
-  res.sendStatus(200);
-});
-
-events.forEach(async (event) => {
-  console.log('📦 Full event:', JSON.stringify(event, null, 2)); // ← 追加
-
-  if (event.type === 'message' && event.message.type === 'text') {
-    console.log('🪪 userId:', event.source.userId); // ← 本来の目的
-    // ...
-  }
-});
-
