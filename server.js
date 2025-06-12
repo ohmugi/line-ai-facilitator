@@ -6,7 +6,8 @@ const config = {
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.CHANNEL_SECRET,
 };
-
+const USER_A_ID = 'Ubd79514779529cc1e0d76eccad1a87ca';
+const USER_B_ID = 'U59c1c2e7c9263ac5e3575eb3ffb6ccc7';
 const client = new Client(config);
 const app = express();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -17,20 +18,26 @@ app.post('/webhook', middleware(config), async (req, res) => {
   events.forEach(async (event) => {
     console.log('📦 Full event:', JSON.stringify(event, null, 2));
 
-    if (event.type === 'message' && event.message.type === 'text') {
-      const userMessage = event.message.text;
-      const userId = event.source.userId;
+   if (event.type === 'message' && event.message.type === 'text') {
+  const userMessage = event.message.text;
+  const userId = event.source.userId;
 
-      console.log('🪪 userId:', userId);
+  const translated = await generateReply(userMessage);
 
-      // 🔁 仮：オウム返しで返信
-      await client.replyMessage(event.replyToken, [
-        {
-          type: 'text',
-          text: `あなたの発言：「${userMessage}」を受け取りました。`, // ※テスト用
-        },
-      ]);
-    }
+  let targetUserId;
+  if (userId === USER_A_ID) {
+    targetUserId = USER_B_ID;
+  } else if (userId === USER_B_ID) {
+    targetUserId = USER_A_ID;
+  } else {
+    console.log('❓ 未知のユーザー');
+    return;
+  }
+
+  await client.pushMessage(targetUserId, [
+    { type: 'text', text: `💬 パートナーからのメッセージ：\n${translated}` },
+  ]);
+}
   });
 
   res.sendStatus(200);
