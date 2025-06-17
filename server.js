@@ -1,4 +1,4 @@
-// LINEカウンセリングBot（1人で本音整理→伝える選択）
+// 柔軟ステップ型 LINEカウンセリングBot（OpenAIで初回発言を分析）
 const express = require('express');
 const { Client, middleware } = require('@line/bot-sdk');
 const { OpenAI } = require('openai');
@@ -25,24 +25,31 @@ app.post('/webhook', middleware(config), async (req, res) => {
       const message = event.message.text.trim();
 
       if (!userContexts[userId]) {
-        userContexts[userId] = { step: 1, data: {} };
+        const analysis = await analyzeMessage(message);
+        userContexts[userId] = {
+          step: 1,
+          data: {
+            moyamoya: analysis.kikkake ? message : '',
+            feeling: analysis.feeling ? extractFeeling(message) : '',
+            reason: analysis.reason ? extractReason(message) : '',
+            wish: analysis.wish ? extractWish(message) : '',
+          },
+        };
+        if (!analysis.kikkake) {
+          await reply(event.replyToken, 'なにがあって、モヤモヤしたんですか？気軽に教えてください。');
+          continue;
+        }
       }
 
       const context = userContexts[userId];
 
-      if (context.step === 1) {
-        context.data.moyamoya = message;
-        await reply(event.replyToken, 'そのときの気持ちは、次のうちどれが近いですか？\n\n😠 イライラ\n😟 不安\n😢 悲しい\n😞 さみしい\n🤔 その他');
-        context.step++;
-      } else if (context.step === 2) {
+      if (!context.data.feeling) {
         context.data.feeling = message;
-        await reply(event.replyToken, 'なぜそう感じたと思いますか？\n\nたとえば「私ばかり我慢してる」「あの一言が引っかかった」など。');
-        context.step++;
-      } else if (context.step === 3) {
+        await reply(event.replyToken, 'そのときの気持ちはどれに近いですか？\n\n😠 イライラ\n😟 不安\n😢 悲しい\n😞 さみしい\n🤔 その他');
+      } else if (!context.data.reason) {
         context.data.reason = message;
-        await reply(event.replyToken, '本当はどうしてほしかったですか？\n\nまたは、自分がどうしたかったかでも大丈夫です。');
-        context.step++;
-      } else if (context.step === 4) {
+        await reply(event.replyToken, 'どうしてそう感じたと思いますか？\n\n例：「私ばっかり我慢してる」「あの一言が引っかかった」など');
+      } else if (!context.data.wish) {
         context.data.wish = message;
         await reply(event.replyToken, '気持ちを整理しています...');
 
@@ -51,8 +58,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
 
         await reply(event.replyToken, `📝 整理されたメッセージ：\n${translated}`);
         await reply(event.replyToken, 'このメッセージをパートナーに伝えてもいいですか？\n\n✅ はい\n❌ いいえ');
-        context.step++;
-      } else if (context.step === 5) {
+      } else if (!context.sent) {
         if (message.includes('はい')) {
           const targetUserId = userId === USER_A_ID ? USER_B_ID : USER_A_ID;
           const senderName = userId === USER_A_ID ? '夫' : '妻';
@@ -63,11 +69,11 @@ app.post('/webhook', middleware(config), async (req, res) => {
               text: `💬 ${senderName}からのメッセージ：\n${context.translated}`,
             },
           ]);
-
           await reply(event.replyToken, 'メッセージをパートナーに送信しました。');
         } else {
           await reply(event.replyToken, '了解しました。メッセージは送信しません。');
         }
+        context.sent = true;
         delete userContexts[userId];
       }
     }
@@ -91,6 +97,37 @@ async function generateReply(data) {
   });
 
   return response.choices[0].message.content;
+}
+
+async function analyzeMessage(message) {
+  const prompt = `次のメッセージに含まれている情報を判定してください。各項目は true か false で答えてください。\n\nモヤモヤのきっかけ（kikkake）\n感情（feeling）\n理由（reason）\n願い（wish）\n\nメッセージ: "${message}"\n\n結果は以下のJSON形式で返してください:\n{ "kikkake": true/false, "feeling": true/false, "reason": true/false, "wish": true/false }`;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-3.5-turbo',
+    messages: [
+      { role: 'system', content: '指定フォーマットに従って、ユーザーの発言を構造化して返してください。' },
+      { role: 'user', content: prompt },
+    ],
+  });
+
+  try {
+    return JSON.parse(response.choices[0].message.content);
+  } catch {
+    return { kikkake: false, feeling: false, reason: false, wish: false };
+  }
+}
+
+// ダミーの感情・理由・願い抽出（実運用では精度向上余地あり）
+function extractFeeling(text) {
+  if (text.includes('イライラ')) return 'イライラ';
+  if (text.includes('不安')) return '不安';
+  return '';
+}
+function extractReason(text) {
+  return '';
+}
+function extractWish(text) {
+  return '';
 }
 
 const port = process.env.PORT || 3000;
