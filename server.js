@@ -46,14 +46,32 @@ app.post('/webhook', middleware(config), async (req, res) => {
 
 async function generateReply(userText) {
   const response = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
-    messages: [
-      { role: 'system', content: 'あなたは夫婦の対話をサポートするAIファシリテーターです。' },
-      { role: 'user', content: userText },
-    ],
-  });
+  model: 'gpt-3.5-turbo',
+  messages: [
+    {
+      role: 'system',
+      content:
+        'あなたは夫婦の対話を支援するAIファシリテーターです。送信者の感情や背景を整理し、相手に伝わりやすく中立的で共感的な表現に翻訳してください。相手を責める言い方は避け、願いや感情の意図に焦点を当ててください。',
+    },
+    { role: 'user', content: userText },
+  ],
+});
+
   return response.choices[0].message.content;
 }
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
+const senderName = userId === USER_A_ID ? '夫' : '妻';
+await client.pushMessage(targetUserId, [
+  {
+    type: 'text',
+    text: `💬 ${senderName}からのメッセージ：\n${translated}`,
+  },
+]);
+await client.replyMessage(event.replyToken, [
+  {
+    type: 'text',
+    text: 'メッセージを翻訳し、パートナーに送信しました。',
+  },
+]);
