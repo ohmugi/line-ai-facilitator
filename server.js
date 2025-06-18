@@ -34,15 +34,50 @@ function formatLineBreaks(text) {
     .replace(/\n{2,}/g, '\n');
 }
 
+// グループチャット用：OpenAI応答生成（displayNameベース）
+async function generateFacilitatedResponse(displayName, message) {
+  const prompt = `${displayName}さんが「${message}」と言いました。\n夫婦間の対話を支援するAIファシリテーターとして、相手に配慮した返答を自然な語り口で行ってください。`;
+  const response = await openai.chat.completions.create({
+    model: 'gpt-3.5-turbo',
+    messages: [
+      { role: 'system', content: 'あなたは夫婦の対話を支援するAIファシリテーターです。安心感と温かみをもって対話を進めてください。' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+  });
+  return response.choices[0].message.content;
+}
+
 app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events;
 
   for (const event of events) {
-    if (event.type === 'message' && event.message.type === 'text') {
+    // 🔸 グループチャット対応ブロック
+    if (event.type === 'message' && event.source.type === 'group') {
+      const groupId = event.source.groupId;
       const userId = event.source.userId;
       const message = event.message.text.trim();
 
-      // 履歴初期化（最大20ターン）
+      try {
+        const profile = await client.getGroupMemberProfile(groupId, userId);
+        const displayName = profile.displayName;
+
+        const aiReply = await generateFacilitatedResponse(displayName, message);
+        const formatted = formatLineBreaks(aiReply);
+
+        await client.replyMessage(event.replyToken, [
+          { type: 'text', text: formatted }
+        ]);
+      } catch (err) {
+        console.error('Group message error:', err);
+      }
+    }
+
+    // 🔸 1:1 チャット対応（従来処理）
+    else if (event.type === 'message' && event.message.type === 'text') {
+      const userId = event.source.userId;
+      const message = event.message.text.trim();
+
       if (!userHistories[userId]) {
         userHistories[userId] = [
           { role: 'system', content: systemPrompt }
@@ -66,7 +101,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
       ]);
 
       if (userHistories[userId].length > 20) {
-        userHistories[userId].splice(1, 2); // system以外を削る
+        userHistories[userId].splice(1, 2);
       }
     }
   }
