@@ -34,20 +34,88 @@ function formatLineBreaks(text) {
     .replace(/\n{2,}/g, '\n');
 }
 
-// グループチャット用：OpenAI応答生成（displayNameベース）
-async function generateFacilitatedResponse(displayName, message) {
-  const prompt = `${displayName}さんが「${message}」と言いました。\n夫婦間の対話を支援するAIファシリテーターとして、相手に配慮した返答を自然な語り口で行ってください。`;
+// ------------------------------
+// 条件分岐：橋渡しか掘り下げか
+function decideFacilitationType(message) {
+  const bridgeKeywords = [
+    "寂しい", "悲しい", "孤独", "つらい", "怒り", "分かって", "むかつく", "我慢", "無視", "冷たい"
+  ];
+  const normalized = message.toLowerCase();
+
+  for (const word of bridgeKeywords) {
+    if (normalized.includes(word)) {
+      return "bridge"; // 橋渡し（相手に届けやすくする）
+    }
+  }
+
+  return "deepen"; // それ以外は深掘り
+}
+
+// ------------------------------
+// 深掘り：本人の気持ち・背景を整理
+async function generateDeepeningResponse(displayName, message) {
+  const prompt = `
+あなたは、夫婦の対話を支援するAIファシリテーターです。
+以下は、グループチャットで${displayName}さんが発言した内容です。
+
+---
+${displayName}さんの発言：
+「${message}」
+---
+
+あなたの目的は、${displayName}さんの気持ちや考えの奥にある「本音」や「背景」を一緒に探っていくことです。
+
+以下の要件に沿って、温かくて丁寧な返答を作成してください：
+
+1. ${displayName}さんの発言をしっかり受け止めたうえで、どんな思いや状況が背景にあるのか、一緒に考える問いかけを行ってください
+2. 感情・出来事・価値観など、整理しやすい方向性を示してください（例：「どんな瞬間にそう感じたのか」「何が引っかかっているのか」など）
+3. 押しつけや診断にならないように気をつけて、思いやりのある言葉でやさしく返してください
+`;
+
   const response = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-4o',
     messages: [
-      { role: 'system', content: 'あなたは夫婦の対話を支援するAIファシリテーターです。安心感と温かみをもって対話を進めてください。' },
-      { role: 'user', content: prompt }
+      { role: 'system', content: prompt }
     ],
     temperature: 0.7,
   });
+
   return response.choices[0].message.content;
 }
 
+// ------------------------------
+// 橋渡し：相手が答えやすい形に整える
+async function generateFacilitatedResponse(displayName, message) {
+  const prompt = `
+あなたは、夫婦間のグループチャットに参加しているAIファシリテーターです。
+以下は、${displayName}さんがチャット内で発言した内容です。
+
+---
+${displayName}さんの発言：
+「${message}」
+---
+
+あなたの役割は以下の3つです：
+
+1. ${displayName}さんの言葉の背景にある本音・感情を、丁寧かつ思いやりのある言葉で翻訳・要約してください
+2. パートナーが返答しやすくなるように、「どの視点から返すと対話が前に進みやすいか」を1〜2個、具体的に提示してください（例：自分の受け止め方／気づけていなかったこと／自分の行動への気づき など）
+3. 語り口は、温かく自然体で、安心感を与えるようにしてください。「無理に返さなくていい」といった逃げ道ではなく、返しやすい道筋を作ってください
+
+※返答はグループチャット内で送信されるため、発言者に話すのではなく、第三者的に2人の関係性を支える語り口でお願いします。
+`;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: prompt }
+    ],
+    temperature: 0.7,
+  });
+
+  return response.choices[0].message.content;
+}
+
+// ------------------------------
 app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events;
 
@@ -62,9 +130,12 @@ app.post('/webhook', middleware(config), async (req, res) => {
         const profile = await client.getGroupMemberProfile(groupId, userId);
         const displayName = profile.displayName;
 
-        const aiReply = await generateFacilitatedResponse(displayName, message);
-        const formatted = formatLineBreaks(aiReply);
+        const mode = decideFacilitationType(message);
+        const aiReply = (mode === 'bridge')
+          ? await generateFacilitatedResponse(displayName, message)
+          : await generateDeepeningResponse(displayName, message);
 
+        const formatted = formatLineBreaks(aiReply);
         await client.replyMessage(event.replyToken, [
           { type: 'text', text: formatted }
         ]);
