@@ -143,6 +143,35 @@ app.post('/webhook', middleware(config), async (req, res) => {
         console.error('Group message error:', err);
       }
     }
+    if (event.type === 'message' && event.source.type === 'group') {
+  const groupId = event.source.groupId;
+  const userId = event.source.userId;
+  const message = event.message.text.trim();
+
+  // 🔸「フォーム」というメッセージに反応
+  if (message === 'フォーム') {
+    await sendFormToGroup(groupId, userId);
+    continue; // 他の処理をスキップ
+  }
+
+  try {
+    const profile = await client.getGroupMemberProfile(groupId, userId);
+    const displayName = profile.displayName;
+
+    const mode = decideFacilitationType(message);
+    const aiReply = (mode === 'bridge')
+      ? await generateFacilitatedResponse(displayName, message)
+      : await generateDeepeningResponse(displayName, message);
+
+    const formatted = formatLineBreaks(aiReply);
+    await client.replyMessage(event.replyToken, [
+      { type: 'text', text: formatted }
+    ]);
+  } catch (err) {
+    console.error('Group message error:', err);
+  }
+}
+
 
     // 🔸 1:1 チャット対応（従来処理）
     else if (event.type === 'message' && event.message.type === 'text') {
