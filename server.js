@@ -151,7 +151,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
   // 🔸「フォーム」というメッセージに反応
   if (message === 'フォーム') {
     await sendFormToGroup(groupId, userId);
-    continue; // 他の処理をスキップ
+    return; // 他の処理をスキップ
   }
 
   try {
