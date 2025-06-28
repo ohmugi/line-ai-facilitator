@@ -105,7 +105,7 @@ ${displayName}さんの発言：
 `;
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4',
+    model: 'gpt-4o',
     messages: [
       { role: 'system', content: prompt }
     ],
@@ -217,24 +217,34 @@ async function sendFormToGroup(groupId, userId) {
     type: "flex",
     altText: "相談フォームはこちら",
     contents: {
-      type: "bubble",
-      body: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          {
-            type: "button",
-            action: {
-              type: "uri",
-              label: "相談フォーム",
-              uri: `https://docs.google.com/forms/d/e/1FAIpQLScBz8_GoEYeT5i_u7ZjB3-Avt5QDesNHU3vbZZ4vmWOA88yhA/viewform?entry.1210449289=${userId}`
-            },
-            style: "primary"
-          }
-        ]
+  "type": "bubble",
+  "size": "mega",
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "spacing": "lg",
+    "paddingAll": "20px",
+    "contents": [
+      {
+        "type": "text",
+        "text": "AIファシリテーターに相談しませんか？",
+        "wrap": true,
+        "weight": "bold",
+        "size": "md",
+        "margin": "none"
+      },
+      {
+        "type": "button",
+        "action": {
+          "type": "uri",
+          "label": "相談フォームを開く",
+          "uri": "https://docs.google.com/forms/d/e/1FAIpQLScBz8_GoEYeT5i_u7ZjB3-Avt5QDesNHU3vbZZ4vmWOA88yhA/viewform?usp=header"
+        },
+        "style": "primary",
+        "margin": "lg"
       }
-    }
-  };
-
+    ]
+  }
+}
   await client.pushMessage(groupId, flexMessage);
 }
