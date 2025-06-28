@@ -217,34 +217,36 @@ async function sendFormToGroup(groupId, userId) {
     type: "flex",
     altText: "相談フォームはこちら",
     contents: {
-  "type": "bubble",
-  "size": "mega",
-  "body": {
-    "type": "box",
-    "layout": "vertical",
-    "spacing": "lg",
-    "paddingAll": "20px",
-    "contents": [
-      {
-        "type": "text",
-        "text": "AIファシリテーターに相談しませんか？",
-        "wrap": true,
-        "weight": "bold",
-        "size": "md",
-        "margin": "none"
-      },
-      {
-        "type": "button",
-        "action": {
-          "type": "uri",
-          "label": "相談フォームを開く",
-          "uri": "https://docs.google.com/forms/d/e/1FAIpQLScBz8_GoEYeT5i_u7ZjB3-Avt5QDesNHU3vbZZ4vmWOA88yhA/viewform?usp=header"
-        },
-        "style": "primary",
-        "margin": "lg"
+      type: "bubble",
+      size: "mega",
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "lg",
+        paddingAll: "20px",
+        contents: [
+          {
+            type: "text",
+            text: "AIファシリテーターに相談しませんか？",
+            wrap: true,
+            weight: "bold",
+            size: "md",
+            margin: "none"
+          },
+          {
+            type: "button",
+            action: {
+              type: "uri",
+              label: "相談フォームを開く",
+              uri: "https://docs.google.com/forms/d/e/1FAIpQLScBz8_GoEYeT5i_u7ZjB3-Avt5QDesNHU3vbZZ4vmWOA88yhA/viewform?usp=header"
+            },
+            style: "primary",
+            margin: "lg"
+          }
+        ]
       }
-    ]
-  }
-}
+    }
+  };
+
   await client.pushMessage(groupId, flexMessage);
 }
