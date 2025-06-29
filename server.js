@@ -148,11 +148,26 @@ app.post('/webhook', middleware(config), async (req, res) => {
   const userId = event.source.userId;
   const message = event.message.text.trim();
 
-  // 🔸「フォーム」というメッセージに反応
-  if (message === 'フォーム') {
+if (event.type === 'message' && event.message.type === 'text') {
+  const userMessage = event.message.text.trim();
+
+  // ▼「フォーム」というキーワードのみに反応する特別処理
+  if (userMessage === "フォーム") {
+    const userId = event.source.userId;
+    const groupId = event.source.groupId || event.source.userId; // 個別チャットでも対応
+
     await sendFormToGroup(groupId, userId);
-    return; // 他の処理をスキップ
+    return; // ← ここで通常の返信処理を止めるのが重要
   }
+
+  // ▼それ以外は通常のAI返信処理
+  const aiReply = await askOpenAI(userMessage);
+  await client.replyMessage(event.replyToken, {
+    type: 'text',
+    text: aiReply,
+  });
+}
+
 
   try {
     const profile = await client.getGroupMemberProfile(groupId, userId);
@@ -213,7 +228,7 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
 
 async function sendFormToGroup(groupId, userId) {
-  const formUrl = `https://docs.google.com/forms/d/e/1FAIpQLScBz8_GoEYeT5i_u7ZjB3-Avt5QDesNHU3vbZZ4vmWOA88yhA/viewform?usp=pp_url&entry.687948068=${userId}`;
+  const formUrl = `https://docs.google.com/forms/d/e/1FAIpQLScBz8_GoEYeT5i_u7ZjB3-Avt5QDesNHU3vbZZ4vmWOA88yhA/viewform?usp=pp_url&entry.687948068=${userId}&entry.654321=${groupId}`;
 
   const flexMessage = {
     type: "flex",
