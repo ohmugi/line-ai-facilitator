@@ -213,6 +213,8 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
 
 async function sendFormToGroup(groupId, userId) {
+  const formUrl = `https://docs.google.com/forms/d/e/1FAIpQLScBz8_GoEYeT5i_u7ZjB3-Avt5QDesNHU3vbZZ4vmWOA88yhA/viewform?usp=pp_url&entry.687948068=${userId}`;
+
   const flexMessage = {
     type: "flex",
     altText: "相談フォームはこちら",
@@ -238,7 +240,7 @@ async function sendFormToGroup(groupId, userId) {
             action: {
               type: "uri",
               label: "相談フォームを開く",
-              uri: "https://docs.google.com/forms/d/e/1FAIpQLScBz8_GoEYeT5i_u7ZjB3-Avt5QDesNHU3vbZZ4vmWOA88yhA/viewform?usp=header"
+              uri: formUrl
             },
             style: "primary",
             margin: "lg"
