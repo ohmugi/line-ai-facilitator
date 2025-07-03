@@ -220,7 +220,7 @@ if (event.type === 'message' && event.message.type === 'text') {
 
       const aiReply = response.choices[0].message.content;
       userHistories[userId].push({ role: 'assistant', content: aiReply });
-      await insertMessage(userId, 'assistant', formatted);
+      await insertMessage(userId, 'assistant', aiReply);
 
 
       const formatted = formatLineBreaks(aiReply);
