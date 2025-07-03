@@ -2,6 +2,12 @@
 const express = require('express');
 const { Client, middleware } = require('@line/bot-sdk');
 const { OpenAI } = require('openai');
+const { createClient } = require('@supabase/supabase-js');
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
 const config = {
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
@@ -147,6 +153,8 @@ app.post('/webhook', middleware(config), async (req, res) => {
   const groupId = event.source.groupId;
   const userId = event.source.userId;
   const message = event.message.text.trim();
+  await insertMessage(userId, 'user', message, groupId);
+
 
 if (event.type === 'message' && event.message.type === 'text') {
   const userMessage = event.message.text.trim();
@@ -179,6 +187,7 @@ if (event.type === 'message' && event.message.type === 'text') {
       : await generateDeepeningResponse(displayName, message);
 
     const formatted = formatLineBreaks(aiReply);
+    await insertMessage(userId, 'assistant', formatted, groupId);
     await client.replyMessage(event.replyToken, [
       { type: 'text', text: formatted }
     ]);
@@ -200,6 +209,8 @@ if (event.type === 'message' && event.message.type === 'text') {
       }
 
       userHistories[userId].push({ role: 'user', content: message });
+      await insertMessage(userId, 'user', message);
+
 
       const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
@@ -209,6 +220,8 @@ if (event.type === 'message' && event.message.type === 'text') {
 
       const aiReply = response.choices[0].message.content;
       userHistories[userId].push({ role: 'assistant', content: aiReply });
+      await insertMessage(userId, 'assistant', formatted);
+
 
       const formatted = formatLineBreaks(aiReply);
       await client.replyMessage(event.replyToken, [
@@ -274,3 +287,20 @@ async function sendFormToGroup(groupId, userId) {
 
   await client.pushMessage(groupId, flexMessage);
 }
+async function insertMessage(userId, role, messageText, sessionId = null) {
+  const { error } = await supabase.from('chat_messages').insert([
+    {
+      user_id: userId,
+      role: role,
+      message_text: messageText,
+      session_id: sessionId,
+    }
+  ]);
+
+  if (error) {
+    console.error('❌ Supabase insert error:', error);
+  } else {
+    console.log('✅ Message saved to Supabase');
+  }
+}
+
