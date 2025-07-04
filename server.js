@@ -262,6 +262,6 @@ if (error) {
   console.error('❌ Supabase insert error:', error);
 } else {
   console.log("✅ Supabase insert success:", data);
-}
+}} 
 
 
