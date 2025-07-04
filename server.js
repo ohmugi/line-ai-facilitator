@@ -128,45 +128,34 @@ app.post('/webhook', middleware(config), async (req, res) => {
   for (const event of events) {
     // 🔸 グループチャット対応ブロック
     if (event.type === 'message' && event.source.type === 'group') {
-      const groupId = event.source.groupId;
-      const userId = event.source.userId;
-      const message = event.message.text.trim();
-
-      try {
-        const profile = await client.getGroupMemberProfile(groupId, userId);
-        const displayName = profile.displayName;
-
-        const mode = decideFacilitationType(message);
-        const aiReply = (mode === 'bridge')
-          ? await generateFacilitatedResponse(displayName, message)
-          : await generateDeepeningResponse(displayName, message);
-
-        const formatted = formatLineBreaks(aiReply);
-        await client.replyMessage(event.replyToken, [
-          { type: 'text', text: formatted }
-        ]);
-      } catch (err) {
-        console.error('Group message error:', err);
-      }
-    }
-    if (event.type === 'message' && event.source.type === 'group') {
   const groupId = event.source.groupId;
   const userId = event.source.userId;
   const message = event.message.text.trim();
-  await insertMessage(userId, 'user', message, groupId);
+if (message === "フォーム") {
+  await sendFormToGroup(groupId, userId);
+  return; // 処理終了
+}
+await insertMessage(userId, 'user', message, groupId);
 
 
-if (event.type === 'message' && event.message.type === 'text') {
-  const userMessage = event.message.text.trim();
+  try {
+    const profile = await client.getGroupMemberProfile(groupId, userId);
+    const displayName = profile.displayName;
 
-  // ▼「フォーム」というキーワードのみに反応する特別処理
-  if (userMessage === "フォーム") {
-    const userId = event.source.userId;
-    const groupId = event.source.groupId || event.source.userId; // 個別チャットでも対応
+    const mode = decideFacilitationType(message);
+    const aiReply = (mode === 'bridge')
+      ? await generateFacilitatedResponse(displayName, message)
+      : await generateDeepeningResponse(displayName, message);
 
-    await sendFormToGroup(groupId, userId);
-    return; // ← ここで通常の返信処理を止めるのが重要
+    const formatted = formatLineBreaks(aiReply);
+    await insertMessage(userId, 'assistant', formatted, groupId);
+    await client.replyMessage(event.replyToken, [
+      { type: 'text', text: formatted }
+    ]);
+  } catch (err) {
+    console.error('Group message error:', err);
   }
+}
 
   // ▼それ以外は通常のAI返信処理
   const aiReply = await askOpenAI(userMessage);
@@ -288,19 +277,19 @@ async function sendFormToGroup(groupId, userId) {
   await client.pushMessage(groupId, flexMessage);
 }
 async function insertMessage(userId, role, messageText, sessionId = null) {
-  const { error } = await supabase.from('chat_messages').insert([
-    {
-      user_id: userId,
-      role: role,
-      message_text: messageText,
-      session_id: sessionId,
-    }
-  ]);
-
-  if (error) {
-    console.error('❌ Supabase insert error:', error);
-  } else {
-    console.log('✅ Message saved to Supabase');
+  const { data, error } = await supabase.from('chat_messages').insert([
+  {
+    user_id: userId,
+    role: role,
+    message_text: messageText,
+    session_id: sessionId,
   }
+]);
+
+if (error) {
+  console.error('❌ Supabase insert error:', error);
+} else {
+  console.log("✅ Supabase insert success:", data);
 }
+
 
