@@ -126,67 +126,41 @@ app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events;
 
   for (const event of events) {
-    // 🔸 グループチャット対応ブロック
+    // グループチャット対応
     if (event.type === 'message' && event.source.type === 'group') {
-  const groupId = event.source.groupId;
-  const userId = event.source.userId;
-  const message = event.message.text.trim();
-if (message === "フォーム") {
-  await sendFormToGroup(groupId, userId);
-  return; // 処理終了
-}
-await insertMessage(userId, 'user', message, groupId);
+      const groupId = event.source.groupId;
+      const userId = event.source.userId;
+      const message = event.message.text.trim();
 
+      // 「フォーム」の場合は早期リターン
+      if (message === "フォーム") {
+        await sendFormToGroup(groupId, userId);
+        return;
+      }
 
-  try {
-    const profile = await client.getGroupMemberProfile(groupId, userId);
-    const displayName = profile.displayName;
+      await insertMessage(userId, 'user', message, groupId);
 
-    const mode = decideFacilitationType(message);
-    const aiReply = (mode === 'bridge')
-      ? await generateFacilitatedResponse(displayName, message)
-      : await generateDeepeningResponse(displayName, message);
+      try {
+        const profile = await client.getGroupMemberProfile(groupId, userId);
+        const displayName = profile.displayName;
 
-    const formatted = formatLineBreaks(aiReply);
-    await insertMessage(userId, 'assistant', formatted, groupId);
-    await client.replyMessage(event.replyToken, [
-      { type: 'text', text: formatted }
-    ]);
-  } catch (err) {
-    console.error('Group message error:', err);
-  }
-}
+        const mode = decideFacilitationType(message);
+        const aiReply = (mode === 'bridge')
+          ? await generateFacilitatedResponse(displayName, message)
+          : await generateDeepeningResponse(displayName, message);
 
-  // ▼それ以外は通常のAI返信処理
-  const aiReply = await askOpenAI(userMessage);
-  await client.replyMessage(event.replyToken, {
-    type: 'text',
-    text: aiReply,
-  });
-}
+        const formatted = formatLineBreaks(aiReply);
+        await insertMessage(userId, 'assistant', formatted, groupId);
 
+        await client.replyMessage(event.replyToken, [
+          { type: 'text', text: formatted }
+        ]);
+      } catch (err) {
+        console.error('Group message error:', err);
+      }
+    }
 
-  try {
-    const profile = await client.getGroupMemberProfile(groupId, userId);
-    const displayName = profile.displayName;
-
-    const mode = decideFacilitationType(message);
-    const aiReply = (mode === 'bridge')
-      ? await generateFacilitatedResponse(displayName, message)
-      : await generateDeepeningResponse(displayName, message);
-
-    const formatted = formatLineBreaks(aiReply);
-    await insertMessage(userId, 'assistant', formatted, groupId);
-    await client.replyMessage(event.replyToken, [
-      { type: 'text', text: formatted }
-    ]);
-  } catch (err) {
-    console.error('Group message error:', err);
-  }
-}
-
-
-    // 🔸 1:1 チャット対応（従来処理）
+    // 1:1 チャット対応
     else if (event.type === 'message' && event.message.type === 'text') {
       const userId = event.source.userId;
       const message = event.message.text.trim();
@@ -200,7 +174,6 @@ await insertMessage(userId, 'user', message, groupId);
       userHistories[userId].push({ role: 'user', content: message });
       await insertMessage(userId, 'user', message);
 
-
       const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: userHistories[userId],
@@ -210,7 +183,6 @@ await insertMessage(userId, 'user', message, groupId);
       const aiReply = response.choices[0].message.content;
       userHistories[userId].push({ role: 'assistant', content: aiReply });
       await insertMessage(userId, 'assistant', aiReply);
-
 
       const formatted = formatLineBreaks(aiReply);
       await client.replyMessage(event.replyToken, [
