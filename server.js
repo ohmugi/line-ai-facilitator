@@ -1,7 +1,7 @@
 // 修正版 server.js
 // 夫婦ファシリテーターBot（専門家モード＋改行調整付き）
 
-import 'dotenv/config';
+require('dotenv').config();
 import express from 'express';
 import { middleware, Client } from '@line/bot-sdk';
 import OpenAI from 'openai';
