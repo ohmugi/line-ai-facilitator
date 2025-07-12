@@ -22,7 +22,7 @@ const lineClient = new Client(lineConfig);
 // Supabase設定
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_API_KEY
+  process.env.SUPABASE_KEY
 );
 
 // OpenAI設定
