@@ -2,10 +2,12 @@
 // 夫婦ファシリテーターBot（専門家モード＋改行調整付き）
 
 require('dotenv').config();
-import express from 'express';
-import { middleware, Client } from '@line/bot-sdk';
-import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
+
+const express = require('express');
+const { middleware, Client } = require('@line/bot-sdk');
+const OpenAI = require('openai');
+const { createClient } = require('@supabase/supabase-js');
+
 
 const app = express();
 app.use(express.json());
