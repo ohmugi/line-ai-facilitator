@@ -17,6 +17,8 @@ const config = {
   channelSecret: process.env.CHANNEL_SECRET,
 };
 
+const client = new Client(config); 
+
 // LINEの署名検証を通すためのミドルウェア
 app.post('/webhook',
   bodyParser.raw({ type: '*/*' }),  // ←これが署名検証用に必要
@@ -37,6 +39,11 @@ app.post('/webhook',
     res.status(200).end();
   }
 );
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server listening on port ${PORT}`);
+});
 
 app.use(express.json());
 
