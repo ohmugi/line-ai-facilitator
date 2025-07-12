@@ -1,6 +1,3 @@
-// 修正版 server.js
-// 夫婦ファシリテーターBot（専門家モード＋改行調整付き）
-
 require('dotenv').config();
 
 const express = require('express');
@@ -9,50 +6,16 @@ const { middleware, Client } = require('@line/bot-sdk');
 const OpenAI = require('openai');
 const { createClient } = require('@supabase/supabase-js');
 
-
-
 const app = express();
+app.use(bodyParser.raw({ type: '*/*' }));  // LINE署名検証用
+app.use(express.json());
+
+// LINE設定
 const config = {
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.CHANNEL_SECRET,
 };
-
-const client = new Client(config); 
-
-// LINEの署名検証を通すためのミドルウェア
-app.post('/webhook',
-  bodyParser.raw({ type: '*/*' }),  // ←これが署名検証用に必要
-  middleware(config),
-  async (req, res) => {
-    const events = req.body.events || [];
-
-    // LINEのイベント処理（例：テキスト返信）
-    for (const event of events) {
-      if (event.type === 'message' && event.message.type === 'text') {
-        await client.replyMessage(event.replyToken, {
-          type: 'text',
-          text: '受け取りました！',
-        });
-      }
-    }
-
-    res.status(200).end();
-  }
-);
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
-});
-
-app.use(express.json());
-
-// LINE設定
-const lineConfig = {
-  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
-  channelSecret: process.env.CHANNEL_SECRET
-};
-const lineClient = new Client(lineConfig);
+const client = new Client(config);
 
 // Supabase設定
 const supabase = createClient(
@@ -63,7 +26,8 @@ const supabase = createClient(
 // OpenAI設定
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-app.post('/webhook', middleware(lineConfig), async (req, res) => {
+// Webhook受信
+app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events;
 
   for (const event of events) {
@@ -105,7 +69,7 @@ app.post('/webhook', middleware(lineConfig), async (req, res) => {
 
         await insertMessage(userId, 'assistant', reply, groupId);
 
-        await lineClient.replyMessage(event.replyToken, [{
+        await client.replyMessage(event.replyToken, [{
           type: 'text',
           text: reply
         }]);
@@ -139,7 +103,7 @@ async function insertMessage(userId, role, messageText, sessionId) {
   console.log('✅ Supabase insert success');
 }
 
-// 履歴取得と要約
+// 履歴取得
 async function fetchHistory(sessionId) {
   const { data, error } = await supabase
     .from('chat_messages')
@@ -161,15 +125,16 @@ async function fetchHistory(sessionId) {
   );
 }
 
-// フォーム確認メッセージ（ダミー）
+// フォーム送信
 async function sendFormToGroup(groupId) {
-  await lineClient.pushMessage(groupId, [{
+  await client.pushMessage(groupId, [{
     type: 'text',
     text: '📮 相談フォームはこちらです：\nhttps://forms.gle/xxxxxxxx'
   }]);
 }
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`🚀 Server listening on port ${port}`);
+// サーバー起動（10000で固定 or Render側の環境変数）
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server listening on port ${PORT}`);
 });
