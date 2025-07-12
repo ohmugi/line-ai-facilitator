@@ -4,12 +4,40 @@
 require('dotenv').config();
 
 const express = require('express');
+const bodyParser = require('body-parser');
 const { middleware, Client } = require('@line/bot-sdk');
 const OpenAI = require('openai');
 const { createClient } = require('@supabase/supabase-js');
 
 
+
 const app = express();
+const config = {
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.CHANNEL_SECRET,
+};
+
+// LINEの署名検証を通すためのミドルウェア
+app.post('/webhook',
+  bodyParser.raw({ type: '*/*' }),  // ←これが署名検証用に必要
+  middleware(config),
+  async (req, res) => {
+    const events = req.body.events || [];
+
+    // LINEのイベント処理（例：テキスト返信）
+    for (const event of events) {
+      if (event.type === 'message' && event.message.type === 'text') {
+        await client.replyMessage(event.replyToken, {
+          type: 'text',
+          text: '受け取りました！',
+        });
+      }
+    }
+
+    res.status(200).end();
+  }
+);
+
 app.use(express.json());
 
 // LINE設定
