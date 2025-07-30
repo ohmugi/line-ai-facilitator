@@ -13,19 +13,19 @@ app.use(express.json());
 
 // LINE設定
 const config = {
-channelAccessToken: process.env.CHANNEL\_ACCESS\_TOKEN,
-channelSecret: process.env.CHANNEL\_SECRET,
+channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+channelSecret: process.env.CHANNEL_SECRET,
 };
 const client = new Client(config);
 
 // Supabase設定
 const supabase = createClient(
-process.env.SUPABASE\_URL,
-process.env.SUPABASE\_KEY
+process.env.SUPABASE_URL,
+process.env.SUPABASE_KEY
 );
 
 // OpenAI設定
-const openai = new OpenAI({ apiKey: process.env.OPENAI\_API\_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // フォーム送信
 async function sendFormToGroup(groupId) {
