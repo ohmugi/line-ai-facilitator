@@ -158,9 +158,10 @@ ${history}`;
         await insertMessage(userId, 'assistant', reply, groupId);
         await client.replyMessage(event.replyToken, [{ type: 'text', text: reply }]);
       }
-    } catch (err) {
-      console.error('❌ Error in event handling:', err);
-    }
+   } catch (err) {
+  console.error('❌ Error in event handling:', err.response?.data || err.message || err);
+}
+
   }
   res.status(200).end();
 });
