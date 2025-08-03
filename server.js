@@ -182,6 +182,33 @@ ${history}`;
   res.status(200).end();
 });
 
+if (event.type === 'message' && (event.source.type === 'group' || event.source.type === 'user')) {
+  const userId = event.source.userId;
+  const sessionId = event.source.groupId || event.source.userId; // グループ or 個人セッション
+
+  const message = event.message.text;
+  console.log(`[User]: ${message}`);
+
+  await insertMessage(userId, 'user', message, sessionId); // Supabaseへ記録
+
+  const history = await fetchHistory(sessionId);
+  const prompt = buildPrompt(history); // プロンプト構築は変更不要
+
+  const reply = await chatCompletion(prompt); // OpenAIへ送信
+  console.log(`[Kemii]: ${reply}`);
+
+  await insertMessage(userId, 'assistant', reply, sessionId); // 応答も記録
+
+  await client.replyMessage(event.replyToken, [
+    {
+      type: 'text',
+      text: reply,
+    },
+  ]);
+}
+
+
+
 // サーバー起動
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
