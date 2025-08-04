@@ -140,7 +140,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
 ※すべてを必ず含む必要はありません。文量やトーンは、相手の発話に応じて柔軟に調整してください。
 
 
-${history}`;
+${safeHistory}`;
 
         const completion = await openai.chat.completions.create({
           model: 'gpt-4o',
