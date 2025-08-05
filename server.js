@@ -109,6 +109,17 @@ async function getUserName(userId) {
   return lineProfile.displayName;
 }
 
+async function setCustomName(userId, customName) {
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ custom_name: customName })
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('❌ カスタム名の保存に失敗:', error.message);
+  }
+}
+
 
 // Webhook処理
 app.post('/webhook', middleware(config), async (req, res) => {
