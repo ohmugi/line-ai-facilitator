@@ -89,6 +89,27 @@ async function fetchHistory(sessionId) {
   return summary + recent.map(msg => `${msg.role === 'user' ? 'ユーザー' : 'けみー'}：${msg.message_text}`).join('\n');
 }
 
+// 名前取得
+async function getUserName(userId) {
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('custom_name, display_name')
+    .eq('user_id', userId)
+    .single();
+
+  if (profile?.custom_name) return profile.custom_name;
+  if (profile?.display_name) return profile.display_name;
+
+  // なければLINEから取得
+  const lineProfile = await client.getProfile(userId);
+  await supabase.from('user_profiles').upsert({
+    user_id: userId,
+    display_name: lineProfile.displayName
+  });
+  return lineProfile.displayName;
+}
+
+
 // Webhook処理
 app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events;
