@@ -192,6 +192,29 @@ const systemPrompt = character.prompt_template;
   res.status(200).end();
 });
 
+async function insertFeedback({
+  userId,
+  characterName = 'けみー',
+  feedbackType,
+  comment,
+  targetPromptSection = null
+}) {
+  const { error } = await supabase.from('character_feedbacks').insert({
+    user_id: userId,
+    character_name: characterName,
+    feedback_type: feedbackType,
+    comment,
+    target_prompt_section: targetPromptSection
+  });
+
+  if (error) {
+    console.error('❌ フィードバックの保存に失敗:', error.message);
+    return false;
+  }
+
+  console.log('✅ フィードバックを保存しました');
+  return true;
+}
 
 
 
