@@ -28,8 +28,6 @@ const supabase = createClient(
 
 
 
-const improvedPrompt = response.choices[0].message.content;
-
 // フォーム送信
 async function sendFormToGroup(groupId) {
   await client.pushMessage(groupId, [{
