@@ -1,11 +1,13 @@
 // 環境設定
-require('dotenv').config();
+import dotenv from 'dotenv';
+dotenv.config();
 
-const express = require('express');
-const bodyParser = require('body-parser');
-const { middleware, Client } = require('@line/bot-sdk');
-const { createClient } = require('@supabase/supabase-js');
-const { OpenAI } = require('openai');
+import express from 'express';
+import bodyParser from 'body-parser';
+import { middleware, Client } from '@line/bot-sdk';
+import { createClient } from '@supabase/supabase-js';
+import { OpenAI } from 'openai';
+
 
 const app = express();
 app.use(bodyParser.raw({ type: '*/*' }));
