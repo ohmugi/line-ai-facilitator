@@ -168,6 +168,50 @@ app.post('/webhook', middleware(config), async (req, res) => {
   res.status(200).end();
 });
 
+import express from 'express';
+import { middleware, Client } from '@line/bot-sdk';
+import { startDiagnosis } from './services/diagnosisService.js';
+
+const app = express();
+const config = {
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.CHANNEL_SECRET,
+};
+const client = new Client(config);
+
+app.post('/webhook', middleware(config), async (req, res) => {
+  const events = req.body.events;
+
+  for (const event of events) {
+    if (event.type === 'message' && event.message.type === 'text') {
+      const text = event.message.text;
+      const userId = event.source.userId;
+
+      if (text.includes("診断")) {
+        const question = await startDiagnosis(userId);
+
+        await client.replyMessage(event.replyToken, {
+          type: 'text',
+          text: `にゃん性格診断を始めるにゃ！\n\n${question.text}`,
+          quickReply: {
+            items: question.choices.map(choice => ({
+              type: 'action',
+              action: {
+                type: 'postback',
+                label: choice.label,
+                data: `q=${question.id}&a=${choice.value}`,
+              },
+            })),
+          },
+        });
+      }
+    }
+  }
+
+  res.sendStatus(200);
+});
+
+
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Server listening on port ${PORT}`);
