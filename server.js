@@ -1,4 +1,5 @@
-// 環境設定
+// server.js（1対1にも対応した修正版）
+
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -7,8 +8,6 @@ import bodyParser from 'body-parser';
 import { middleware, Client } from '@line/bot-sdk';
 import { createClient } from '@supabase/supabase-js';
 import { OpenAI } from 'openai';
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 
 const app = express();
 app.use(bodyParser.raw({ type: '*/*' }));
@@ -27,17 +26,8 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-
-// フォーム送信
-async function sendFormToGroup(groupId) {
-  await client.pushMessage(groupId, [{
-    type: 'text',
-    text: '📮 相談フォームはこちらです：\nhttps://forms.gle/xxxxxxxx'
-  }]);
-}
-
-// にゃチェック
 function ensureKemiiStyle(text) {
   const hasNya = text.includes("にゃ");
   if (!hasNya) {
@@ -46,7 +36,6 @@ function ensureKemiiStyle(text) {
   return text;
 }
 
-// 補助テンプレ選定
 function getPromptHelper(message) {
   if (message.includes("疲れ") || message.includes("しんど")) {
     return `ユーザーは育児・家事・生活の中で疲れや負担を感じています。
@@ -63,7 +52,6 @@ function getPromptHelper(message) {
 難しい言葉や正論を並べず、感情に興味がある猫として、やさしく問いかけてください。`;
 }
 
-// Supabase保存
 async function insertMessage(userId, role, messageText, sessionId) {
   if (!sessionId) return;
   const { error } = await supabase.from('chat_messages').insert({
@@ -75,7 +63,6 @@ async function insertMessage(userId, role, messageText, sessionId) {
   if (error) throw new Error(`Supabase insert failed: ${error.message}`);
 }
 
-// 履歴取得
 async function fetchHistory(sessionId) {
   const { data, error } = await supabase
     .from('chat_messages')
@@ -91,7 +78,6 @@ async function fetchHistory(sessionId) {
   return summary + recent.map(msg => `${msg.role === 'user' ? 'ユーザー' : 'けみー'}：${msg.message_text}`).join('\n');
 }
 
-// 名前取得
 async function getUserName(userId) {
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -102,7 +88,6 @@ async function getUserName(userId) {
   if (profile?.custom_name) return profile.custom_name;
   if (profile?.display_name) return profile.display_name;
 
-  // なければLINEから取得
   const lineProfile = await client.getProfile(userId);
   await supabase.from('user_profiles').upsert({
     user_id: userId,
@@ -111,49 +96,38 @@ async function getUserName(userId) {
   return lineProfile.displayName;
 }
 
-async function setCustomName(userId, customName) {
-  const { error } = await supabase
-    .from('user_profiles')
-    .update({ custom_name: customName })
-    .eq('user_id', userId);
-
-  if (error) {
-    console.error('❌ カスタム名の保存に失敗:', error.message);
-  }
-}
-
-
-// Webhook処理
 app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events;
   for (const event of events) {
     try {
-      if (event.type === 'message' && event.source.type === 'group') {
+      if (event.type === 'message' && (event.source.type === 'group' || event.source.type === 'user')) {
         const userId = event.source.userId;
-        const groupId = event.source.groupId;
+        const sessionId = event.source.type === 'group' ? event.source.groupId : userId;
         const message = event.message.text.trim();
 
         if (message === 'フォーム') {
-          await sendFormToGroup(groupId);
+          await client.pushMessage(sessionId, [{
+            type: 'text',
+            text: '📮 相談フォームはこちらです：\nhttps://forms.gle/xxxxxxxx'
+          }]);
           return;
         }
 
-        await insertMessage(userId, 'user', message, groupId);
-        const history = await fetchHistory(groupId);
+        await insertMessage(userId, 'user', message, sessionId);
+        const history = await fetchHistory(sessionId);
         const helper = getPromptHelper(message);
 
         const { data: character, error } = await supabase
-  .from('characters')
-  .select('prompt_template')
-  .eq('name', 'けみー') // 将来的にメッセージから動的に変える場合はここを工夫
-  .single();
+          .from('characters')
+          .select('prompt_template')
+          .eq('name', 'けみー')
+          .single();
 
-if (error || !character) {
-  throw new Error(`キャラクター設定の取得に失敗しました: ${error?.message}`);
-}
+        if (error || !character) {
+          throw new Error(`キャラクター設定の取得に失敗しました: ${error?.message}`);
+        }
 
-const systemPrompt = character.prompt_template;
-
+        const systemPrompt = character.prompt_template;
 
         const completion = await openai.chat.completions.create({
           model: 'gpt-4o',
@@ -184,7 +158,7 @@ const systemPrompt = character.prompt_template;
 
         const reply = ensureKemiiStyle(reformulated.choices[0].message.content);
 
-        await insertMessage(userId, 'assistant', reply, groupId);
+        await insertMessage(userId, 'assistant', reply, sessionId);
         await client.replyMessage(event.replyToken, [{ type: 'text', text: reply }]);
       }
     } catch (err) {
@@ -194,36 +168,6 @@ const systemPrompt = character.prompt_template;
   res.status(200).end();
 });
 
-
-
-
-async function insertFeedback({
-  userId,
-  characterName = 'けみー',
-  feedbackType,
-  comment,
-  targetPromptSection = null
-}) {
-  const { error } = await supabase.from('character_feedbacks').insert({
-    user_id: userId,
-    character_name: characterName,
-    feedback_type: feedbackType,
-    comment,
-    target_prompt_section: targetPromptSection
-  });
-
-  if (error) {
-    console.error('❌ フィードバックの保存に失敗:', error.message);
-    return false;
-  }
-
-  console.log('✅ フィードバックを保存しました');
-  return true;
-}
-
-
-
-// サーバー起動
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Server listening on port ${PORT}`);
