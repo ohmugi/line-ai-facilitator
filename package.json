@@ -2,6 +2,7 @@
   "name": "line-openai-bot",
   "version": "1.0.0",
   "main": "server.js",
+  "type": "module",           // ← ここに1つだけ追加！
   "scripts": {
     "start": "node server.js"
   },
@@ -15,8 +16,4 @@
     "openai": "^4.20.0",
     "@supabase/supabase-js": "^2.39.7"
   }
-  {  "type": "module",
-  "scripts": {
-    "start": "node server.js"}
-
 }
