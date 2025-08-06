@@ -7,6 +7,7 @@ import bodyParser from 'body-parser';
 import { middleware, Client } from '@line/bot-sdk';
 import { createClient } from '@supabase/supabase-js';
 import { OpenAI } from 'openai';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 
 const app = express();
