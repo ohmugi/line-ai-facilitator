@@ -168,7 +168,6 @@ app.post('/webhook', middleware(config), async (req, res) => {
   res.status(200).end();
 });
 
-import { middleware, Client } from '@line/bot-sdk';
 import { startDiagnosis } from './services/diagnosisService.js';
 
 const app = express();
