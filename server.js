@@ -193,14 +193,7 @@ const systemPrompt = character.prompt_template;
   res.status(200).end();
 });
 
-// Node.js内で OpenAI の出力を受け取って...
-const improvedPrompt = response.choices[0].message.content;
 
-// Supabaseのcharactersテーブルを更新する！
-await supabase
-  .from('characters')
-  .update({ prompt_template: improvedPrompt })
-  .eq('name', 'けみー');
 
 
 async function insertFeedback({
