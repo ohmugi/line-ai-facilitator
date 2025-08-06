@@ -24,24 +24,7 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-// OpenAI設定
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const response = await openai.chat.completions.create({
-  model: 'gpt-4o',
-  messages: [
-    {
-      role: 'system',
-      content: 'あなたはプロンプト編集の専門家です。'
-    },
-    {
-      role: 'user',
-      content: `以下のプロンプトを、次のフィードバックに基づいて改善してください。
-（...上のプロンプトをここに貼る）`
-    }
-  ],
-  temperature: 0.7
-});
 
 const improvedPrompt = response.choices[0].message.content;
 
