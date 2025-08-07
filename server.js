@@ -196,7 +196,6 @@ app.post('/webhook', middleware(config), async (req, res) => {
 
 import { startDiagnosis } from './services/diagnosisService.js';
 
-const app = express();
 const config = {
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.CHANNEL_SECRET,
