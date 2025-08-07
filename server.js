@@ -8,6 +8,7 @@ import bodyParser from 'body-parser';
 import { middleware, Client } from '@line/bot-sdk';
 import { createClient } from '@supabase/supabase-js';
 import { OpenAI } from 'openai';
+import { startDiagnosis } from './services/diagnosisService.js';
 
 const app = express();
 app.use(bodyParser.raw({ type: '*/*' }));
@@ -194,13 +195,9 @@ app.post('/webhook', middleware(config), async (req, res) => {
   res.status(200).end();
 });
 
-import { startDiagnosis } from './services/diagnosisService.js';
 
-const config = {
-  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
-  channelSecret: process.env.CHANNEL_SECRET,
-};
-const client = new Client(config);
+
+
 
 
 
