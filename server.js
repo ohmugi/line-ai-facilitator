@@ -98,6 +98,7 @@ async function getUserName(userId) {
 
 app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events;
+
   for (const event of events) {
     try {
       if (event.type === 'message' && (event.source.type === 'group' || event.source.type === 'user')) {
@@ -105,6 +106,29 @@ app.post('/webhook', middleware(config), async (req, res) => {
         const sessionId = event.source.type === 'group' ? event.source.groupId : userId;
         const message = event.message.text.trim();
 
+        // ✅ ここが診断スタートの処理！
+        if (message.includes('診断')) {
+          const question = await startDiagnosis(userId);
+
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: `にゃん性格診断を始めるにゃ！\n\n${question.text}`,
+            quickReply: {
+              items: question.choices.map(choice => ({
+                type: 'action',
+                action: {
+                  type: 'postback',
+                  label: choice.label,
+                  data: `q=${question.id}&a=${choice.value}`,
+                },
+              })),
+            },
+          });
+
+          return; // ← 他の処理はスキップ
+        }
+
+        // 📮 相談フォームリンク
         if (message === 'フォーム') {
           await client.pushMessage(sessionId, [{
             type: 'text',
@@ -113,6 +137,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
           return;
         }
 
+        // 💬 通常のけみーの対話処理（履歴・GPT呼び出しなど）
         await insertMessage(userId, 'user', message, sessionId);
         const history = await fetchHistory(sessionId);
         const helper = getPromptHelper(message);
@@ -165,6 +190,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
       console.error('❌ Error in event handling:', err.response?.data || err.message || err);
     }
   }
+
   res.status(200).end();
 });
 
