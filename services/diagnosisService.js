@@ -39,3 +39,13 @@ export async function processAnswer(userId, questionId, answerValue) {
 
   return isFinished ? null : QUESTIONS[nextQuestionIndex];
 }
+
+export function calculateDiagnosisResult(scores) {
+  const total = Object.values(scores).reduce((sum, v) => sum + parseInt(v), 0);
+
+  if (total <= 5) return 'cat_type_1.png'; // 慎重派
+  if (total <= 10) return 'cat_type_2.png'; // 思慮深い柔軟派
+  if (total <= 15) return 'cat_type_3.png'; // 楽観的自由人
+  return 'cat_type_4.png'; // 超マイペース
+}
+
