@@ -140,11 +140,30 @@ app.post('/webhook', middleware(config), async (req, res) => {
     const nextQuestion = await processAnswer(userId, questionId, answerValue);
 
     if (!nextQuestion) {
-      await client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: '診断が完了したにゃ！結果はあとでお知らせするにゃ〜',
-      });
-    } else {
+  // スコアを取得
+  const { data: sessions } = await supabase
+    .from('diagnosis_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('finished', true)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const session = sessions[0];
+  const fileName = calculateDiagnosisResult(session.scores);
+
+  await client.replyMessage(event.replyToken, [
+    {
+      type: 'text',
+      text: '診断が完了したにゃ！結果はこちらだにゃ👇',
+    },
+    {
+      type: 'image',
+      originalContentUrl: `https://あなたのドメイン/images/${fileName}`,
+      previewImageUrl: `https://あなたのドメイン/images/${fileName}`,
+    },
+  ]);
+}else {
       await client.replyMessage(event.replyToken, {
         type: 'text',
         text: `${nextQuestion.text}`,
