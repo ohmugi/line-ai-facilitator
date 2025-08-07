@@ -129,6 +129,49 @@ app.post('/webhook', middleware(config), async (req, res) => {
           return; // ← 他の処理はスキップ
         }
 
+        if (event.type === 'postback') {
+  const userId = event.source.userId;
+  const data = event.postback.data; // 例: "q=1&a=2"
+  const [qPart, aPart] = data.split('&');
+  const questionId = parseInt(qPart.split('=')[1]);
+  const answerValue = aPart.split('=')[1];
+
+  try {
+    const nextQuestion = await processAnswer(userId, questionId, answerValue);
+
+    if (!nextQuestion) {
+      await client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '診断が完了したにゃ！結果はあとでお知らせするにゃ〜',
+      });
+    } else {
+      await client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `${nextQuestion.text}`,
+        quickReply: {
+          items: nextQuestion.choices.map(choice => ({
+            type: 'action',
+            action: {
+              type: 'postback',
+              label: choice.label,
+              data: `q=${nextQuestion.id}&a=${choice.value}`,
+            },
+          })),
+        },
+      });
+    }
+  } catch (err) {
+    console.error('❌ Postback処理エラー:', err.message || err);
+    await client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: '回答の保存中にエラーが起きたにゃ…ごめんにゃ',
+    });
+  }
+
+  return;
+}
+
+
         // 📮 相談フォームリンク
         if (message === 'フォーム') {
           await client.pushMessage(sessionId, [{
