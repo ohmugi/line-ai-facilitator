@@ -1,5 +1,5 @@
 // src/utils/feedbackProcessor.js
-import { supabase } from '../supabase.js';
+import supabase from './lib/supabaseClient.js'; 
 import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
