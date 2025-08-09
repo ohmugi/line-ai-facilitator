@@ -41,6 +41,49 @@ function ensureKemiiStyle(text) {
   return text;
 }
 
+async function startDeepTopic(groupId, assigneeUserId, topicKey) {
+  const { data: tmpl } = await supabase
+    .from('deep_templates')
+    .select('intro_variants')
+    .eq('topic_key', topicKey)
+    .single();
+
+  const variants = tmpl?.intro_variants || [
+    'けみー、昨日変な夢を見たにゃ。小さい頃のこと思い出した…'
+  ];
+  const intro = variants[Math.floor(Math.random() * variants.length)];
+
+  const { data: session, error } = await supabase
+    .from('deep_sessions')
+    .insert({
+      group_id: groupId,
+      topic_key: topicKey,
+      assignee_user_id: assigneeUserId,
+      step: 0,
+      payload: {}
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('startDeepTopic insert error:', error.message);
+    return;
+  }
+
+  await client.pushMessage(groupId, {
+    type: 'text',
+    text: intro,
+    quickReply: {
+      items: [
+        { type:'action', action:{ type:'postback', label:'ある', data:`deep:${session.id}:intro_yes` } },
+        { type:'action', action:{ type:'postback', label:'ない/覚えてない', data:`deep:${session.id}:intro_no` } },
+        { type:'action', action:{ type:'postback', label:'また今度', data:`deep:${session.id}:skip` } }
+      ]
+    }
+  });
+}
+
+
 function getPromptHelper(message) {
   if (message.includes('疲れ') || message.includes('しんど')) {
     return `ユーザーは育児・家事・生活の中で疲れや負担を感じています。
@@ -118,51 +161,22 @@ async function onText(event) {
   const userId = event.source.userId;
   const sessionId = isGroup ? event.source.groupId : userId;
 
-  // 入力の正規化＆ログ（全角/半角スペース除去）
+  // 入力の正規化（全角/半角スペース除去）＋ログ
   const raw = (event.message.text || '').trim();
   const text = raw.replace(/\s/g, '');
   console.log('[onText] text:', raw, 'normalized:', text);
 
-  // ① 診断コマンド（フォールバック付き）
-  if (/^(診断|しんだん)$/i.test(text)) {
-    try {
-      console.log('[DIAG] start');
-      const question = await startDiagnosis(userId); // ここで失敗する可能性あり
-      console.log('[DIAG] got question:', question?.id);
-
-      await client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: `にゃん性格診断を始めるにゃ！\n\n${question.text}`,
-        quickReply: {
-          items: question.choices.map((choice) => ({
-            type: 'action',
-            action: {
-              type: 'postback',
-              label: choice.label,
-              data: `diag:q=${question.id}&a=${choice.value}`,
-            },
-          })),
-        },
-      });
-    } catch (e) {
-      console.error('[DIAG] error:', e?.message || e);
-      // フォールバック（診断サービスが壊れていても必ず応答する）
-      await client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: 'にゃん性格診断・テスト版だにゃ！まずはこれに答えてみて？',
-        quickReply: {
-          items: [
-            { type: 'action', action: { type: 'postback', label: '朝型', data: 'diag:q=1&a=morning' } },
-            { type: 'action', action: { type: 'postback', label: '夜型', data: 'diag:q=1&a=night' } },
-            { type: 'action', action: { type: 'postback', label: '決められない', data: 'diag:q=1&a=unknown' } },
-          ],
-        },
-      });
-    }
+  // ★ セキララ開始（親テーマをテスト起動）
+  if (/^(セキララ|深い話|はじめて)$/i.test(text)) {
+    await startDeepTopic(
+      isGroup ? event.source.groupId : userId, // グループID推奨
+      userId,                                  // ひとまず発言者を指名
+      'parenting_style'                        // 親テーマ
+    );
     return;
   }
 
-  // ② 相談フォームリンク
+  // ② 相談フォーム
   if (text === 'フォーム') {
     await client.replyMessage(event.replyToken, {
       type: 'text',
@@ -171,8 +185,8 @@ async function onText(event) {
     return;
   }
 
-  // ③ 通常対話（ここは今のままでOK）
-  const message = raw; // 普段の処理は正規化前の文面を使う
+  // ③ 通常対話
+  const message = raw; // 通常処理は正規化前を使用
   await insertMessage(userId, 'user', message, sessionId);
 
   const history = await fetchHistory(sessionId);
@@ -209,8 +223,7 @@ async function onText(event) {
     messages: [
       {
         role: 'system',
-        content:
-          'あなたは「けみー」というAIキャラの表現アドバイザーです。以下の文章を、「けみーらしく」やわらかく、問いを1つに絞って再構成してください。語尾に「にゃ」が自然に混ざり、説明っぽさは控え、問い＋つぶやきで返してください。',
+        content: 'あなたは「けみー」の表現アドバイザーです。文を「けみーらしく」やわらかく、問いは1つに絞って整えてください。語尾に「にゃ」が自然に混ざるように。',
       },
       { role: 'user', content: rawReply },
     ],
@@ -244,6 +257,78 @@ async function onPostback(event) {
   const userId = event.source.userId;
   const data = event.postback?.data || '';
 
+async function onPostback(event) {
+  const data = event.postback?.data || '';
+
+  // ★ deep: セキララの最小ハンドラ（STEP0→STEP1、STEP1→STEP2）
+  if (data.startsWith('deep:')) {
+    const [_, sessionId, token, arg] = data.split(':'); // deep:<SESSION_ID>:s1:<index> 等
+
+    // 現在のセッション取得
+    const { data: s } = await supabase.from('deep_sessions').select('*').eq('id', sessionId).single();
+    if (!s) {
+      await client.replyMessage(event.replyToken, { type: 'text', text: 'セッションが見つからないにゃ…' });
+      return;
+    }
+
+    // STEP0 → STEP1（範囲）
+    if (s.step === 0) {
+      await supabase.from('deep_sessions').update({ step: 1 }).eq('id', s.id);
+      const { data: tmpl } = await supabase.from('deep_templates').select('s1_choices').eq('topic_key', s.topic_key).single();
+      const items = tmpl.s1_choices.map((label, i) => ({
+        type: 'action', action: { type: 'postback', label, data: `deep:${s.id}:s1:${i}` }
+      }));
+      items.push({ type: 'action', action: { type: 'postback', label: 'パス', data: `deep:${s.id}:pass` }});
+      await client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: 'へぇ〜にゃ。もし思い出すなら、どのあたり？',
+        quickReply: { items }
+      });
+      return;
+    }
+
+    // STEP1（範囲選択） → STEP2（ポジ候補）
+    if (s.step === 1 && token === 's1') {
+      const domainKeyList = ['discipline','study','chores','money','social','health'];
+      const domainKey = domainKeyList[Number(arg)] || domainKeyList[0];
+
+      // payloadに保存＆step進行
+      await supabase.from('deep_sessions')
+        .update({ step: 2, payload: { ...(s.payload || {}), s1_domain: domainKey } })
+        .eq('id', s.id);
+
+      const { data: tmpl } = await supabase
+        .from('deep_templates')
+        .select('s2_pos_choices')
+        .eq('topic_key', s.topic_key)
+        .single();
+
+      const choices = (tmpl.s2_pos_choices[domainKey] || []).map((label, i) => ({
+        type:'action', action:{ type:'postback', label, data:`deep:${s.id}:s2:${i}` }
+      }));
+      choices.push({ type:'action', action:{ type:'postback', label:'パス', data:`deep:${s.id}:pass` }});
+
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'その中で“ありがたかった”に近いのは？',
+        quickReply:{ items: choices }
+      });
+      return;
+    }
+
+    // 以降（STEP3〜7）は後で追加。今はここまで通ればOK。
+    await client.replyMessage(event.replyToken, { type:'text', text:'続きはこの後実装するにゃ。' });
+    return;
+  }
+
+  // （診断diag: を使うなら、この下に書く。今回はセキララ優先なので省略/後回し）
+  return;
+}
+  // 既存の diag: 分岐があればそのまま下で
+  ...
+}
+
+  
   // 診断フローのPostback: "diag:q=1&a=2"
   if (data.startsWith('diag:')) {
     const payload = data.replace(/^diag:/, '');
