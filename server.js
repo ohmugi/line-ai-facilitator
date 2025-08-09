@@ -236,99 +236,11 @@ async function onText(event) {
 }
 
 
-// ------- Postback（診断・他機能の分岐点）-------
-
-if (data.startsWith('diag:q=1')) {
-  await client.replyMessage(event.replyToken, {
-    type: 'text',
-    text: 'なるほどにゃ。じゃあ次の質問いくよ！\n最近いちばんワクワクしたのはどれ？',
-    quickReply: {
-      items: [
-        { type: 'action', action: { type: 'postback', label: '人との会話', data: 'diag:q=2&a=talk' } },
-        { type: 'action', action: { type: 'postback', label: '新しい挑戦', data: 'diag:q=2&a=challenge' } },
-        { type: 'action', action: { type: 'postback', label: 'おいしいごはん', data: 'diag:q=2&a=food' } },
-      ],
-    },
-  });
-  return;
-}
-
+// ------- Postback（診断・セキララ）-------
 async function onPostback(event) {
   const userId = event.source.userId;
   const data = event.postback?.data || '';
 
-async function onPostback(event) {
-  const data = event.postback?.data || '';
-
-  // ★ deep: セキララの最小ハンドラ（STEP0→STEP1、STEP1→STEP2）
-  if (data.startsWith('deep:')) {
-    const [_, sessionId, token, arg] = data.split(':'); // deep:<SESSION_ID>:s1:<index> 等
-
-    // 現在のセッション取得
-    const { data: s } = await supabase.from('deep_sessions').select('*').eq('id', sessionId).single();
-    if (!s) {
-      await client.replyMessage(event.replyToken, { type: 'text', text: 'セッションが見つからないにゃ…' });
-      return;
-    }
-
-    // STEP0 → STEP1（範囲）
-    if (s.step === 0) {
-      await supabase.from('deep_sessions').update({ step: 1 }).eq('id', s.id);
-      const { data: tmpl } = await supabase.from('deep_templates').select('s1_choices').eq('topic_key', s.topic_key).single();
-      const items = tmpl.s1_choices.map((label, i) => ({
-        type: 'action', action: { type: 'postback', label, data: `deep:${s.id}:s1:${i}` }
-      }));
-      items.push({ type: 'action', action: { type: 'postback', label: 'パス', data: `deep:${s.id}:pass` }});
-      await client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: 'へぇ〜にゃ。もし思い出すなら、どのあたり？',
-        quickReply: { items }
-      });
-      return;
-    }
-
-    // STEP1（範囲選択） → STEP2（ポジ候補）
-    if (s.step === 1 && token === 's1') {
-      const domainKeyList = ['discipline','study','chores','money','social','health'];
-      const domainKey = domainKeyList[Number(arg)] || domainKeyList[0];
-
-      // payloadに保存＆step進行
-      await supabase.from('deep_sessions')
-        .update({ step: 2, payload: { ...(s.payload || {}), s1_domain: domainKey } })
-        .eq('id', s.id);
-
-      const { data: tmpl } = await supabase
-        .from('deep_templates')
-        .select('s2_pos_choices')
-        .eq('topic_key', s.topic_key)
-        .single();
-
-      const choices = (tmpl.s2_pos_choices[domainKey] || []).map((label, i) => ({
-        type:'action', action:{ type:'postback', label, data:`deep:${s.id}:s2:${i}` }
-      }));
-      choices.push({ type:'action', action:{ type:'postback', label:'パス', data:`deep:${s.id}:pass` }});
-
-      await client.replyMessage(event.replyToken, {
-        type:'text',
-        text:'その中で“ありがたかった”に近いのは？',
-        quickReply:{ items: choices }
-      });
-      return;
-    }
-
-    // 以降（STEP3〜7）は後で追加。今はここまで通ればOK。
-    await client.replyMessage(event.replyToken, { type:'text', text:'続きはこの後実装するにゃ。' });
-    return;
-  }
-
-  // （診断diag: を使うなら、この下に書く。今回はセキララ優先なので省略/後回し）
-  return;
-}
-  // 既存の diag: 分岐があればそのまま下で
-  ...
-}
-
-  
   // 診断フローのPostback: "diag:q=1&a=2"
   if (data.startsWith('diag:')) {
     const payload = data.replace(/^diag:/, '');
@@ -340,7 +252,7 @@ async function onPostback(event) {
       const nextQuestion = await processAnswer(userId, questionId, answerValue);
 
       if (!nextQuestion) {
-        // スコアを取得
+        // スコア取得→結果表示
         const { data: sessions } = await supabase
           .from('diagnosis_sessions')
           .select('*')
@@ -361,6 +273,7 @@ async function onPostback(event) {
           },
         ]);
       } else {
+        // 次の設問を提示
         await client.replyMessage(event.replyToken, {
           type: 'text',
           text: nextQuestion.text,
@@ -384,11 +297,70 @@ async function onPostback(event) {
       });
     }
 
+    return; // ← このreturnは関数内なので合法
+  }
+  // ↑ ここで"diag:"ブロックが完全に閉じていることが重要（波カッコ対応）
+
+  // セキララ（deep）フロー: "deep:<SESSION_ID>:s1:<index>" など
+  else if (data.startsWith('deep:')) {
+    const [_, sessionId, token, arg] = data.split(':');
+
+    // セッション取得
+    const { data: s } = await supabase.from('deep_sessions').select('*').eq('id', sessionId).single();
+    if (!s) {
+      await client.replyMessage(event.replyToken, { type: 'text', text: 'セッションが見つからないにゃ…' });
+      return;
+    }
+
+    // STEP0 → STEP1（範囲）
+    if (s.step === 0) {
+      await supabase.from('deep_sessions').update({ step: 1 }).eq('id', s.id);
+      const { data: tmpl } = await supabase.from('deep_templates').select('s1_choices').eq('topic_key', s.topic_key).single();
+      const items = tmpl.s1_choices.map((label, i) => ({
+        type: 'action', action: { type: 'postback', label, data: `deep:${s.id}:s1:${i}` }
+      }));
+      items.push({ type: 'action', action: { type: 'postback', label: 'パス', data: `deep:${s.id}:pass` }});
+      await client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: 'へぇ〜にゃ。もし思い出すなら、どのあたり？',
+        quickReply: { items }
+      });
+      return;
+    }
+
+    // STEP1（範囲）→ STEP2（ポジ候補）
+    if (s.step === 1 && token === 's1') {
+      const domains = ['discipline','study','chores','money','social','health'];
+      const domainKey = domains[Number(arg)] || domains[0];
+
+      await supabase
+        .from('deep_sessions')
+        .update({ step: 2, payload: { ...(s.payload || {}), s1_domain: domainKey } })
+        .eq('id', s.id);
+
+      const { data: tmpl } = await supabase
+        .from('deep_templates')
+        .select('s2_pos_choices')
+        .eq('topic_key', s.topic_key)
+        .single();
+
+      const choices = (tmpl.s2_pos_choices[domainKey] || []).map((label, i) => ({
+        type:'action', action:{ type:'postback', label, data:`deep:${s.id}:s2:${i}` }
+      }));
+      choices.push({ type:'action', action:{ type:'postback', label:'パス', data:`deep:${s.id}:pass` }});
+
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'その中で“ありがたかった”に近いのは？',
+        quickReply:{ items: choices }
+      });
+      return;
+    }
+
+    // ここからSTEP3〜7は今後追加
+    await client.replyMessage(event.replyToken, { type:'text', text:'続きはこの後実装するにゃ。' });
     return;
   }
-
-  // ここに「深いテーマ 7ステップ」の Postback も将来追加できます:
-  // if (data.startsWith('deep:')) { ... }
 
   // 未対応のPostbackは黙って無視
   return;
