@@ -117,30 +117,53 @@ async function onText(event) {
   const isGroup = event.source.type === 'group';
   const userId = event.source.userId;
   const sessionId = isGroup ? event.source.groupId : userId;
-  const message = (event.message.text || '').trim();
 
-  // ① 診断コマンド
-  if (message.includes('診断')) {
-    const question = await startDiagnosis(userId);
-    await client.replyMessage(event.replyToken, {
-      type: 'text',
-      text: `にゃん性格診断を始めるにゃ！\n\n${question.text}`,
-      quickReply: {
-        items: question.choices.map((choice) => ({
-          type: 'action',
-          action: {
-            type: 'postback',
-            label: choice.label,
-            data: `diag:q=${question.id}&a=${choice.value}`,
-          },
-        })),
-      },
-    });
+  // 入力の正規化＆ログ（全角/半角スペース除去）
+  const raw = (event.message.text || '').trim();
+  const text = raw.replace(/\s/g, '');
+  console.log('[onText] text:', raw, 'normalized:', text);
+
+  // ① 診断コマンド（フォールバック付き）
+  if (/^(診断|しんだん)$/i.test(text)) {
+    try {
+      console.log('[DIAG] start');
+      const question = await startDiagnosis(userId); // ここで失敗する可能性あり
+      console.log('[DIAG] got question:', question?.id);
+
+      await client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `にゃん性格診断を始めるにゃ！\n\n${question.text}`,
+        quickReply: {
+          items: question.choices.map((choice) => ({
+            type: 'action',
+            action: {
+              type: 'postback',
+              label: choice.label,
+              data: `diag:q=${question.id}&a=${choice.value}`,
+            },
+          })),
+        },
+      });
+    } catch (e) {
+      console.error('[DIAG] error:', e?.message || e);
+      // フォールバック（診断サービスが壊れていても必ず応答する）
+      await client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: 'にゃん性格診断・テスト版だにゃ！まずはこれに答えてみて？',
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'postback', label: '朝型', data: 'diag:q=1&a=morning' } },
+            { type: 'action', action: { type: 'postback', label: '夜型', data: 'diag:q=1&a=night' } },
+            { type: 'action', action: { type: 'postback', label: '決められない', data: 'diag:q=1&a=unknown' } },
+          ],
+        },
+      });
+    }
     return;
   }
 
   // ② 相談フォームリンク
-  if (message === 'フォーム') {
+  if (text === 'フォーム') {
     await client.replyMessage(event.replyToken, {
       type: 'text',
       text: '📮 相談フォームはこちらです：\nhttps://forms.gle/xxxxxxxx',
@@ -148,7 +171,8 @@ async function onText(event) {
     return;
   }
 
-  // ③ 通常対話
+  // ③ 通常対話（ここは今のままでOK）
+  const message = raw; // 普段の処理は正規化前の文面を使う
   await insertMessage(userId, 'user', message, sessionId);
 
   const history = await fetchHistory(sessionId);
@@ -168,7 +192,6 @@ async function onText(event) {
 
   const systemPrompt = character.prompt_template;
 
-  // けみーの一次返答
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
@@ -181,7 +204,6 @@ async function onText(event) {
 
   const rawReply = completion.choices[0].message.content;
 
-  // けみーらしく整形
   const reformulated = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
@@ -196,12 +218,27 @@ async function onText(event) {
   });
 
   const reply = ensureKemiiStyle(reformulated.choices[0].message.content || 'うんうん、聞いてるにゃ。');
-
   await insertMessage(userId, 'assistant', reply, sessionId);
   await client.replyMessage(event.replyToken, { type: 'text', text: reply });
 }
 
+
 // ------- Postback（診断・他機能の分岐点）-------
+
+if (data.startsWith('diag:q=1')) {
+  await client.replyMessage(event.replyToken, {
+    type: 'text',
+    text: 'なるほどにゃ。じゃあ次の質問いくよ！\n最近いちばんワクワクしたのはどれ？',
+    quickReply: {
+      items: [
+        { type: 'action', action: { type: 'postback', label: '人との会話', data: 'diag:q=2&a=talk' } },
+        { type: 'action', action: { type: 'postback', label: '新しい挑戦', data: 'diag:q=2&a=challenge' } },
+        { type: 'action', action: { type: 'postback', label: 'おいしいごはん', data: 'diag:q=2&a=food' } },
+      ],
+    },
+  });
+  return;
+}
 
 async function onPostback(event) {
   const userId = event.source.userId;
