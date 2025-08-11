@@ -2,7 +2,7 @@
   "name": "line-openai-bot",
   "version": "1.0.0",
   "main": "server.js",
-  "type": "module",     
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
@@ -10,10 +10,28 @@
     "node": "18.x"
   },
   "dependencies": {
+    "@line/bot-sdk": "^7.4.0",
+    "@supabase/supabase-js": "^2.39.7",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "@line/bot-sdk": "^7.4.0",
-    "openai": "^4.20.0",
-    "@supabase/supabase-js": "^2.39.7"
+    "openai": "^4.20.0"
+  },
+  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ohmugi/line-ai-facilitator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ohmugi/line-ai-facilitator/issues"
+  },
+  "homepage": "https://github.com/ohmugi/line-ai-facilitator#readme",
+  "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "eslint": "^9.33.0",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^16.3.0"
   }
 }

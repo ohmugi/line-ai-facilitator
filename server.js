@@ -31,6 +31,25 @@ const supabase = createClient(
 // OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// --- Deep flow constants ---
+const DEEP_DOMAINS = ['discipline','study','chores','money','social','health'];
+
+const MEANING_CHOICES = ["自信","安心感","挑戦心","優しさ","まだ分からない"];
+const IMPACT_CHOICES  = ["ある","ない","当時だけ"];
+const REFRAME_CHOICES = ["心配しすぎ","時間/お金の余裕なし","世代の常識","期待が大きい","分からない"];
+
+// 共通：クイックリプライ送信用
+function qrItems(pairs){ // [{label, data}]
+  return {
+    items: pairs.map(p => ({ type:'action', action:{ type:'postback', label:p.label, data:p.data }}))
+  };
+}
+
+async function updateSession(id, patch){
+  await supabase.from('deep_sessions').update(patch).eq('id', id);
+}
+
+
 // ------- ユーティリティ -------
 
 function ensureKemiiStyle(text) {
@@ -81,6 +100,43 @@ async function startDeepTopic(groupId, assigneeUserId, topicKey) {
       ]
     }
   });
+}
+async function summarizeDeepResult(topicKey, payload){
+  // 今は 'parenting_style' 前提。必要に応じて分岐を増やせます。
+  const s1 = payload.s1_domain || '';
+  const s2 = payload.s2_pos || '';
+  const s3 = payload.s3_meaning || '';
+  const s4 = payload.s4_neg || '';
+  const s5 = payload.s5_impact || '';
+  const s6 = payload.s6_reframe || '';
+
+  const prompt = `
+あなたは夫婦の緩衝材AI「けみー」です。評価語を避け、事実＋やわらかな解釈で1〜2文に要約します。
+語尾はやさしく、「〜だったみたい」「〜かもしれない」を使ってください。
+
+テーマ: 親からの育て方
+要素:
+- 範囲: ${s1}
+- ありがたかった: ${s2}
+- それで育った良さ: ${s3}
+- 気になった: ${s4}
+- 影響: ${s5}
+- 背景の仮説: ${s6}
+
+出力: 1〜2文の日本語。けみー口調は軽く、ねぎらいも一言入れる。
+`;
+
+  try {
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role:'system', content:'要約アシスタント' }, { role:'user', content: prompt }],
+      temperature: 0.5
+    });
+    return r.choices[0].message.content?.trim() || 'まとめたにゃ。';
+  } catch(e) {
+    console.error('summary error:', e?.message || e);
+    return `“${s2}”がうれしくて、“${s4}”はちょっと…だったみたいにゃ。`;
+  }
 }
 
 
@@ -357,9 +413,131 @@ async function onPostback(event) {
       return;
     }
 
-    // ここからSTEP3〜7は今後追加
-    await client.replyMessage(event.replyToken, { type:'text', text:'続きはこの後実装するにゃ。' });
-    return;
+        // STEP2（ポジの具体） → STEP3（意味付け）
+    if (s.step === 2 && token === 's2') {
+      const domain = (s.payload?.s1_domain) || DEEP_DOMAINS[0];
+
+      // s2_pos 保存（テンプレから文言を特定）
+      const { data: tmpl2 } = await supabase
+        .from('deep_templates')
+        .select('s2_pos_choices')
+        .eq('topic_key', s.topic_key)
+        .single();
+
+      const labels = tmpl2?.s2_pos_choices?.[domain] || [];
+      const picked = labels[Number(arg)];
+      await updateSession(s.id, { step: 3, payload: { ...(s.payload||{}), s2_pos: picked }});
+
+      // STEP3 提示
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'それって今のあなたのどんな良さにつながってる？',
+        quickReply: qrItems(
+          MEANING_CHOICES.map((lb,i)=>({label:lb, data:`deep:${s.id}:s3:${i}`})).concat([{label:'パス', data:`deep:${s.id}:pass`}])
+        )
+      });
+      return;
+    }
+
+    // STEP3（意味） → STEP4（ネガの具体）
+    if (s.step === 3 && token === 's3') {
+      const meaning = MEANING_CHOICES[Number(arg)];
+      await updateSession(s.id, { step: 4, payload: { ...(s.payload||{}), s3_meaning: meaning }});
+
+      const domain = (s.payload?.s1_domain) || DEEP_DOMAINS[0];
+      const { data: tmpl } = await supabase
+        .from('deep_templates')
+        .select('s4_neg_choices')
+        .eq('topic_key', s.topic_key)
+        .single();
+
+      const negs = tmpl?.s4_neg_choices?.[domain] || [];
+      const items = negs.map((lb,i)=>({label:lb, data:`deep:${s.id}:s4:${i}`}));
+      items.push({label:'パス', data:`deep:${s.id}:pass`});
+
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'反対に“これはちょっと…”に近いのは？',
+        quickReply: qrItems(items)
+      });
+      return;
+    }
+
+    // STEP4（ネガ） → STEP5（影響）
+    if (s.step === 4 && token === 's4') {
+      const domain = (s.payload?.s1_domain) || DEEP_DOMAINS[0];
+      const { data: tmpl } = await supabase
+        .from('deep_templates')
+        .select('s4_neg_choices')
+        .eq('topic_key', s.topic_key)
+        .single();
+
+      const negs = tmpl?.s4_neg_choices?.[domain] || [];
+      const picked = negs[Number(arg)];
+      await updateSession(s.id, { step: 5, payload: { ...(s.payload||{}), s4_neg: picked }});
+
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'それ、今も影響ある？',
+        quickReply: qrItems(IMPACT_CHOICES.map((lb,i)=>({label:lb, data:`deep:${s.id}:s5:${i}`})))
+      });
+      return;
+    }
+
+    // STEP5（影響） → STEP6（リフレーム）
+    if (s.step === 5 && token === 's5') {
+      const impact = IMPACT_CHOICES[Number(arg)];
+      await updateSession(s.id, { step: 6, payload: { ...(s.payload||{}), s5_impact: impact }});
+
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'親の立場を想像すると、どれに近い？',
+        quickReply: qrItems(REFRAME_CHOICES.map((lb,i)=>({label:lb, data:`deep:${s.id}:s6:${i}`})))
+      });
+      return;
+    }
+
+    // STEP6（リフレーム） → STEP7（要約・完了）
+    if (s.step === 6 && token === 's6') {
+      const reframe = REFRAME_CHOICES[Number(arg)];
+      const full = { ...(s.payload||{}), s6_reframe: reframe };
+
+      // 最終保存＆要約
+      await updateSession(s.id, { step: 7, payload: full });
+
+      const summary = await summarizeDeepResult(s.topic_key, full); // 下で関数を追加します
+
+      // deep_runs に確定保存
+      await supabase.from('deep_runs').insert({
+        group_id: s.group_id,
+        user_id: s.assignee_user_id,
+        topic_key: s.topic_key,
+        results: full,
+        summary_shared: summary
+      });
+
+      // セッション完了
+      await supabase.from('deep_sessions').update({ status:'done' }).eq('id', s.id);
+
+      // 共有＆締め
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text: `${summary}\n\nありがと。今日はここまでにゃ。`
+      });
+
+      // 翌日の相手への予約は後でON（スケジューラ実装後）
+      // await scheduleNextAssignee(s);
+
+      return;
+    }
+
+    // パスやスキップ
+    if (token === 'pass' || token === 'skip' || token === 'intro_no') {
+      await supabase.from('deep_sessions').update({ status:'cancelled' }).eq('id', s.id);
+      await client.replyMessage(event.replyToken, { type:'text', text:'今日はここまででOKにゃ。' });
+      return;
+    }
+
   }
 
   // 未対応のPostbackは黙って無視
