@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// BEGIN AI EDIT: update-character-prompt
 export async function updateCharacterPrompt(characterName) {
   // フィードバック集計
   const { data: feedbacks, error } = await supabase
@@ -14,6 +15,11 @@ export async function updateCharacterPrompt(characterName) {
   feedbacks.forEach(f => {
     if (summary[f.feedback_type] !== undefined) summary[f.feedback_type] += 1;
   });
+
+  // ...（関数の残り部分は既存のまま）
+}
+// END AI EDIT: update-character-prompt
+
 
   // 現在のプロンプト取得
   const { data: characters } = await supabase
