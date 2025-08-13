@@ -188,6 +188,7 @@ async function fetchHistory(sessionId) {
 
 // ------- Webhook -------
 
+// BEGIN AI EDIT: webhook-handler
 app.post('/webhook', middleware(config), async (req, res) => {
   const events = req.body.events || [];
   try {
@@ -198,6 +199,8 @@ app.post('/webhook', middleware(config), async (req, res) => {
     res.status(200).end(); // LINE側には200を返す
   }
 });
+// END AI EDIT: webhook-handler
+
 
 async function handleEvent(event) {
   if (event.type === 'message' && event.message?.type === 'text') {
