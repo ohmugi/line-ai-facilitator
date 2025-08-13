@@ -190,20 +190,28 @@ async function fetchHistory(sessionId) {
 
 // BEGIN AI EDIT: webhook-handler
 app.post('/webhook', middleware(config), async (req, res) => {
-  const events = req.body.events || [];
+  // Normalize events to an array
+  const events = Array.isArray(req.body?.events) ? req.body.events : [];
   try {
-    await Promise.all(events.map(handleEvent));
+    const results = await Promise.allSettled(events.map(event => handleEvent(event)));
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const event = events[index];
+        console.error('Webhook handleEvent failed', { type: event?.type, reason: result.reason });
+      }
+    });
+  } catch (err) {
+    // Log unexpected errors
+    console.error('Webhook handler unexpected error', err);
+  } finally {
+    // Always respond with 200 to LINE
     res.status(200).end();
-  } catch (e) {
-    console.error('❌ Webhook error:', e?.response?.data || e.message || e);
-    res.status(200).end(); // LINE側には200を返す
-  }
+  
+
 });
 // END AI EDIT: webhook-handler
 
-
-async function handleEvent(event) {
-  if (event.type === 'message' && event.message?.type === 'text') {
+if (event.type === 'message' && event.message?.type === 'text') {
     return onText(event);
   }
   if (event.type === 'postback') {
