@@ -30,6 +30,22 @@ function verifyLineSignature(req) {
 
 // ---- health ----
 app.get("/health", (_req, res) => res.status(200).send("ok"));
+app.get("/version", (_req, res) => {
+  res.status(200).json({
+    commit: process.env.RENDER_GIT_COMMIT || "local",
+    time: new Date().toISOString()
+  });
+});
+
+function log(level, msg, extra = {}) {
+  console.log(JSON.stringify({
+    level,
+    msg,
+    ...extra,
+    ts: new Date().toISOString()
+  }));
+}
+
 
 // ---- 定数：固定質問（MVPは1問だけ）----
 const QUESTION_ID = "q001";
