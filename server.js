@@ -1,692 +1,243 @@
-// server.js（重複解消・Postback分離版）
-
-import dotenv from 'dotenv';
-dotenv.config();
+// server.js (MVP最小版) - ESM前提
+// 必要環境変数：LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 import express from 'express';
 import bodyParser from 'body-parser';
-import { middleware, Client } from '@line/bot-sdk';
+import { Client as LineClient, middleware as lineMiddleware } from '@line/bot-sdk';
 import { createClient } from '@supabase/supabase-js';
-import { OpenAI } from 'openai';
-import { startDiagnosis, processAnswer, calculateDiagnosisResult } from './services/diagnosisService.js';
 
-const app = express();
+// ====== 環境設定 ======
+const {
+  LINE_CHANNEL_ACCESS_TOKEN,
+  LINE_CHANNEL_SECRET,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  PORT = 10000,
+} = process.env;
 
-// LINEの署名検証に備えて raw を先に
-app.use(bodyParser.raw({ type: '*/*' }));
+if (!LINE_CHANNEL_ACCESS_TOKEN || !LINE_CHANNEL_SECRET || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('環境変数が不足しています。必要: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+  process.exit(1);
+}
 
-// LINE設定
-const config = {
-  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
-  channelSecret: process.env.CHANNEL_SECRET,
-};
-const client = new Client(config);
+// LINEクライアント / Supabase
+const client = new LineClient({
+  channelAccessToken: LINE_CHANNEL_ACCESS_TOKEN,
+  channelSecret: LINE_CHANNEL_SECRET,
+});
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Supabase設定
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+// ====== 小ユーティリティ ======
+const isGroupEvent = (ev) => ev.source?.type === 'group';
+const getSessionKey = (ev) => (isGroupEvent(ev) ? ev.source.groupId : ev.source.userId);
 
-// OpenAI
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// --- Deep flow constants ---
-const DEEP_DOMAINS = ['discipline','study','chores','money','social','health'];
-
-const MEANING_CHOICES = ["自信","安心感","挑戦心","優しさ","まだ分からない"];
-const IMPACT_CHOICES  = ["ある","ない","当時だけ"];
-const REFRAME_CHOICES = ["心配しすぎ","時間/お金の余裕なし","世代の常識","期待が大きい","分からない"];
-
-// 共通：クイックリプライ送信用
-function qrItems(pairs){ // [{label, data}]
+// QuickReply itemsを手早く作る
+function qrItems(pairs) { // [{label, data}]
   return {
-    items: pairs.map(p => ({ type:'action', action:{ type:'postback', label:p.label, data:p.data }}))
+    items: pairs.map(p => ({ type:'action', action:{ type:'postback', label:p.label, data:p.data }})),
   };
 }
 
-async function updateSession(id, patch){
-  await supabase.from('deep_sessions').update(patch).eq('id', id);
-}
-
-
-// ------- ユーティリティ -------
-
-function ensureKemiiStyle(text) {
-  const hasNya = text.includes('にゃ');
-  if (!hasNya) {
-    return text.replace(/([。！？])/g, 'にゃ$1');
-  }
-  return text;
-}
-
-async function startDeepTopic(groupId, assigneeUserId, topicKey) {
-  const { data: tmpl } = await supabase
-    .from('deep_templates')
-    .select('intro_variants')
-    .eq('topic_key', topicKey)
-    .single();
-
-  const variants = tmpl?.intro_variants || [
-    'けみー、昨日変な夢を見たにゃ。小さい頃のこと思い出した…'
-  ];
-  const intro = variants[Math.floor(Math.random() * variants.length)];
-
-  const { data: session, error } = await supabase
-    .from('deep_sessions')
-    .insert({
-      group_id: groupId,
-      topic_key: topicKey,
-      assignee_user_id: assigneeUserId,
-      step: 0,
-      payload: {}
-    })
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error('startDeepTopic insert error:', error.message);
-    return;
-  }
-
-  await client.pushMessage(groupId, {
-    type: 'text',
-    text: intro,
-    quickReply: {
-      items: [
-        { type:'action', action:{ type:'postback', label:'ある', data:`deep:${session.id}:intro_yes` } },
-        { type:'action', action:{ type:'postback', label:'ない/覚えてない', data:`deep:${session.id}:intro_no` } },
-        { type:'action', action:{ type:'postback', label:'また今度', data:`deep:${session.id}:skip` } }
-      ]
-    }
-  });
-}
-async function summarizeDeepResult(topicKey, payload){
-  // 今は 'parenting_style' 前提。必要に応じて分岐を増やせます。
-  const s1 = payload.s1_domain || '';
-  const s2 = payload.s2_pos || '';
-  const s3 = payload.s3_meaning || '';
-  const s4 = payload.s4_neg || '';
-  const s5 = payload.s5_impact || '';
-  const s6 = payload.s6_reframe || '';
-
-  const prompt = `
-あなたは夫婦の緩衝材AI「けみー」です。評価語を避け、事実＋やわらかな解釈で1〜2文に要約します。
-語尾はやさしく、「〜だったみたい」「〜かもしれない」を使ってください。
-
-テーマ: 親からの育て方
-要素:
-- 範囲: ${s1}
-- ありがたかった: ${s2}
-- それで育った良さ: ${s3}
-- 気になった: ${s4}
-- 影響: ${s5}
-- 背景の仮説: ${s6}
-
-出力: 1〜2文の日本語。けみー口調は軽く、ねぎらいも一言入れる。
-`;
-
-  try {
-    const r = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role:'system', content:'要約アシスタント' }, { role:'user', content: prompt }],
-      temperature: 0.5
-    });
-    return r.choices[0].message.content?.trim() || 'まとめたにゃ。';
-  } catch(e) {
-    console.error('summary error:', e?.message || e);
-    return `“${s2}”がうれしくて、“${s4}”はちょっと…だったみたいにゃ。`;
-  }
-}
-
-
-function getPromptHelper(message) {
-  if (message.includes('疲れ') || message.includes('しんど')) {
-    return `ユーザーは育児・家事・生活の中で疲れや負担を感じています。
-けみーは、「どんな瞬間が特にしんどいのか」「逆にどんなときはうれしかったか」などを聞きながら、ユーザーが自分の感情を言葉にできるようにサポートしてください。
-問いは1つに絞り、答えにくそうなら選択肢を添えてください。`;
-  }
-  if (message.includes('ちょっと') || message.includes('モヤモヤ')) {
-    return `ユーザーは「小さなつかれ」や「ちょっとした不満」を話しています。
-けみーは、相手の感情の背景に興味を持って、「どうしてそう感じたのか」「どんな時に似たことがあったか」などを自然に聞いてください。
-アドバイスはせず、答えやすいように選択肢も提示してみてください。`;
-  }
-  return `このやりとりは「雑談フェーズ」です。
-けみーは、答えを出そうとするのではなく、「どんな気持ちだったのか」「なぜそう感じたのか」を知りたがってください。
-難しい言葉や正論を並べず、感情に興味がある猫として、やさしく問いかけてください。`;
-}
-
-async function insertMessage(userId, role, messageText, sessionId) {
-  if (!sessionId) return;
-  const { error } = await supabase.from('chat_messages').insert({
-    user_id: userId,
-    role,
-    message_text: messageText,
-    session_id: sessionId,
-  });
-  if (error) throw new Error(`Supabase insert failed: ${error.message}`);
-}
-
-async function fetchHistory(sessionId) {
+// ====== ライト質問（2問） ======
+// topic: 'food' | 'plan'
+// stepの意味：0=開始直後, 1=自由テキスト回答待ち, 2=二択(＋その他)で感情/性質の確認, 3=小さな行動提案, 4=完了/要約済
+async function startLiteTopic(groupId, assigneeUserId, topic){
   const { data, error } = await supabase
-    .from('chat_messages')
-    .select('role, message_text')
-    .eq('session_id', sessionId)
-    .order('created_at', { ascending: true });
-
-  if (error || !data) return '';
-
-  const recent = data.slice(-5);
-  const summary = data.length > 5 ? `（前略：これまでのやり取りは要約済）\n` : '';
-  return (
-    summary +
-    recent
-      .map((msg) => `${msg.role === 'user' ? 'ユーザー' : 'けみー'}：${msg.message_text}`)
-      .join('\n')
-  );
-}
-
-  // ★ ライト質問ユーティリティ（server.js内のユーティリティ群の下あたりに追記）
-async function startLiteTopic(groupId, assigneeUserId, topic){ // 'food' | 'plan'
-  const { data: ins, error } = await supabase
     .from('lite_sessions')
     .insert({ group_id: groupId, assignee_user_id: assigneeUserId, topic, step: 0, payload: {} })
-    .select('id')
+    .select('*')
     .single();
-  if (error) { console.error('startLiteTopic error', error.message); return; }
+  if (error) { console.error('startLiteTopic error', error); return; }
 
-  const sid = ins.id;
+  const sid = data.id;
   if (topic === 'food'){
-    // Q1: はまっている食べ物
     await client.pushMessage(groupId, {
       type: 'text',
       text: 'もし最近の相手の“はまっている食べ物”を当てるなら？',
-      quickReply:{
-        items:[
-          { type:'action', action:{ type:'postback', label:'考える', data:`lite:${sid}:food:answer` } },
-          { type:'action', action:{ type:'postback', label:'また今度', data:`lite:${sid}:skip` } }
-        ]
-      }
+      quickReply: qrItems([
+        { label:'考える', data:`lite:${sid}:food:answer` },
+        { label:'また今度', data:`lite:${sid}:skip` },
+      ]),
     });
   } else {
-    // Q2: 今年中に一緒にしたいこと
     await client.pushMessage(groupId, {
       type:'text',
       text:'今年中に「一緒にやりたいこと」を一つだけ挙げるなら？',
-      quickReply:{
-        items:[
-          { type:'action', action:{ type:'postback', label:'考える', data:`lite:${sid}:plan:answer` } },
-          { type:'action', action:{ type:'postback', label:'また今度', data:`lite:${sid}:skip` } }
-        ]
-      }
+      quickReply: qrItems([
+        { label:'考える', data:`lite:${sid}:plan:answer` },
+        { label:'また今度', data:`lite:${sid}:skip` },
+      ]),
     });
   }
 }
 
-// ★ onText() 内：起動ワードの分岐（「セキララ」分岐のすぐ下あたりに追記）
-if (/^ライト1$/i.test(text)) {
-  await startLiteTopic(isGroup ? event.source.groupId : userId, userId, 'food');
-  return;
-}
-if (/^ライト2$/i.test(text)) {
-  await startLiteTopic(isGroup ? event.source.groupId : userId, userId, 'plan');
-  return;
-}
+// ====== Webサーバ ======
+const app = express();
+app.get('/health', (_, res) => res.status(200).send('ok'));
 
-// ★ onPostback() 内：deep: 分岐の“直前”に追記
-else if (data.startsWith('lite:')) {
-  const [_, sessionId, topic, token] = data.split(':');
-
-  // セッション取得
-  const { data: s } = await supabase.from('lite_sessions').select('*').eq('id', sessionId).single();
-  if (!s) {
-    await client.replyMessage(event.replyToken, { type:'text', text:'セッションが見つからないにゃ…' });
-    return;
-  }
-
-  // ステップ進行
-  // STEP0 → ユーザーの自由回答受け付け
-  if (s.step === 0 && (token === 'answer')) {
-    await supabase.from('lite_sessions').update({ step: 1 }).eq('id', s.id);
-    await client.replyMessage(event.replyToken, {
-      type:'text',
-      text: (topic==='food')
-        ? '思い浮かんだ“食べ物の名前”をここに送ってみてにゃ'
-        : 'やりたいことを短く一言で送ってみてにゃ'
-    });
-    return;
-  }
-
-  // STEP1 → “仮説提示＋選択肢化”（ズレても訂正しやすい2択）
-  if (s.step === 1 && event.type === 'message' && event.message?.type === 'text') {
-    const userText = (event.message.text || '').trim();
-    const payload = { ...(s.payload||{}), userAnswer: userText };
-    await supabase.from('lite_sessions').update({ step: 2, payload }).eq('id', s.id);
-
-    if (topic === 'food') {
-      // 便利 or こだわり の2択（抽象問避け）
-      await client.replyMessage(event.replyToken, {
-        type:'text',
-        text:`なるほどにゃ。「${userText}」って、“ちょっとした便利さが嬉しい”感じ？ それとも“趣味のこだわり”っぽい？`,
-        quickReply:{
-          items:[
-            { type:'action', action:{ type:'postback', label:'便利さ', data:`lite:${s.id}:food:feel_convenience` } },
-            { type:'action', action:{ type:'postback', label:'こだわり', data:`lite:${s.id}:food:feel_hobby` } },
-            { type:'action', action:{ type:'postback', label:'どちらでもない', data:`lite:${s.id}:food:feel_none` } }
-          ]
-        }
-      });
-    } else {
-      // 気分：おだやか or アクティブ の2択（具体的対比）
-      await client.replyMessage(event.replyToken, {
-        type:'text',
-        text:`いいにゃ。「${userText}」は、どちらかと言えば“おだやかに過ごす系”？ それとも“アクティブに動く系”？`,
-        quickReply:{
-          items:[
-            { type:'action', action:{ type:'postback', label:'おだやか', data:`lite:${s.id}:plan:mood_calm` } },
-            { type:'action', action:{ type:'postback', label:'アクティブ', data:`lite:${s.id}:plan:mood_active` } },
-            { type:'action', action:{ type:'postback', label:'どちらでもない', data:`lite:${s.id}:plan:mood_none` } }
-          ]
-        }
-      });
-    }
-    return;
-  }
-
-  // STEP2 → “次アクション提案”（小さく具体）
-  if (s.step === 2 && token) {
-    const nextPayload = { ...(s.payload||{}), choice: token };
-    await supabase.from('lite_sessions').update({ step: 3, payload: nextPayload }).eq('id', s.id);
-
-    if (topic === 'food') {
-      // 行動提案：次の買い物 or 週末ランチ
-      await client.replyMessage(event.replyToken, {
-        type:'text',
-        text:'よかったら小さく試してみよ？ 次の買い物で1つだけカゴに入れるか、週末ランチで食べにいくか、どっちにする？',
-        quickReply:{
-          items:[
-            { type:'action', action:{ type:'postback', label:'次の買い物に追加', data:`lite:${s.id}:food:act_buy` } },
-            { type:'action', action:{ type:'postback', label:'週末ランチにする', data:`lite:${s.id}:food:act_lunch` } },
-            { type:'action', action:{ type:'postback', label:'今回は見送り', data:`lite:${s.id}:food:act_skip` } }
-          ]
-        }
-      });
-    } else {
-      // 行動提案：今月のカレンダー or 情報1枚共有
-      await client.replyMessage(event.replyToken, {
-        type:'text',
-        text:'小さく前進させるにゃ。今月のカレンダーに仮で入れるか、画像/リンクを1つだけ送り合うか、どっちにする？',
-        quickReply:{
-          items:[
-            { type:'action', action:{ type:'postback', label:'カレンダーに仮入れ', data:`lite:${s.id}:plan:act_calendar` } },
-            { type:'action', action:{ type:'postback', label:'画像/リンクを共有', data:`lite:${s.id}:plan:act_share` } },
-            { type:'action', action:{ type:'postback', label:'今回は見送り', data:`lite:${s.id}:plan:act_skip` } }
-          ]
-        }
-      });
-    }
-    return;
-  }
-
-  // STEP3 → まとめ＋回収リマインド文言（保存想定）
-  if (s.step === 3 && token?.startsWith('act_')) {
-    const done = token.replace(/^.*:/,''); // act_xxx
-    await supabase.from('lite_sessions').update({ step: 4 }).eq('id', s.id);
-
-    const summary = (s.topic==='food')
-      ? '今日の小さな一歩：次の買い物 or 週末ランチで試すにゃ。数日後にそっと聞くから、気楽にいこう〜'
-      : '今日の小さな一歩：カレンダー仮入れ or 情報1枚の共有にゃ。進んだらそれで十分えらい〜';
-
-    await client.replyMessage(event.replyToken, { type:'text', text: summary });
-    return;
-  }
-
-  // スキップ系
-  if (token === 'skip'){
-    await supabase.from('lite_sessions').update({ step: 99 }).eq('id', s.id);
-    await client.replyMessage(event.replyToken, { type:'text', text:'今日はここまででOKにゃ。' });
-    return;
-  }
-
-  return;
-}
-
-// ------- Webhook -------
-
-// BEGIN AI EDIT: webhook-handler
-app.post('/webhook', middleware(config), async (req, res) => {
-  const events = req.body.events || [];
+app.post('/webhook', lineMiddleware({
+  channelAccessToken: LINE_CHANNEL_ACCESS_TOKEN,
+  channelSecret: LINE_CHANNEL_SECRET,
+}), async (req, res) => {
   try {
-    await Promise.all(events.map(handleEvent));
-    res.status(200).end();
+    const results = await Promise.all((req.body.events || []).map(handleEvent));
+    res.json(results);
   } catch (e) {
-    console.error('❌ Webhook error:', e?.response?.data || e.message || e);
-    res.status(200).end(); // LINE側には200を返す
+    console.error('Webhook error', e);
+    res.status(500).end();
   }
 });
-// END AI EDIT: webhook-handler
 
+app.listen(PORT, () => {
+  console.log(`🚀 Server listening on port ${PORT}`);
+});
 
-async function handleEvent(event) {
+// ====== イベント振り分け ======
+async function handleEvent(event){
   if (event.type === 'message' && event.message?.type === 'text') {
     return onText(event);
   }
   if (event.type === 'postback') {
     return onPostback(event);
   }
-  // それ以外（join/leave等）は無視
-  return;
+  return null;
 }
 
-// ------- Message（通常メッセージ）-------
-
-async function onText(event) {
-  const isGroup = event.source.type === 'group';
-  const userId = event.source.userId;
-  const sessionId = isGroup ? event.source.groupId : userId;
-
-  // 入力の正規化（全角/半角スペース除去）＋ログ
+// ====== テキスト受信 ======
+async function onText(event){
   const raw = (event.message.text || '').trim();
-  const text = raw.replace(/\s/g, '');
-  console.log('[onText] text:', raw, 'normalized:', text);
+  const text = raw.replace(/\s/g, ''); // 全角半角スペース除去
+  const groupIdOrUserId = getSessionKey(event);
+  const userId = event.source.userId;
 
-  // ★ セキララ開始（親テーマをテスト起動）
-  if (/^(セキララ|深い話|はじめて)$/i.test(text)) {
-    await startDeepTopic(
-      isGroup ? event.source.groupId : userId, // グループID推奨
-      userId,                                  // ひとまず発言者を指名
-      'parenting_style'                        // 親テーマ
-    );
+  // MVP起動ワード
+  if (/^ライト1$/i.test(text)) {
+    await startLiteTopic(groupIdOrUserId, userId, 'food');
+    return;
+  }
+  if (/^ライト2$/i.test(text)) {
+    await startLiteTopic(groupIdOrUserId, userId, 'plan');
     return;
   }
 
-  // ② 相談フォーム
-  if (text === 'フォーム') {
+  // ★「自由テキスト回答待ち（step=1）」のセッションに対する回答をここで受ける
+  // 対象は：このユーザーが担当の最新セッションで step=1 のもの（グループ/個チャット両対応）
+  const { data: active } = await supabase
+    .from('lite_sessions')
+    .select('*')
+    .eq('group_id', groupIdOrUserId)
+    .eq('assignee_user_id', userId)
+    .eq('step', 1)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  const s = active?.[0];
+
+  if (s) {
+    const userText = (event.message.text || '').trim();
+    const payload = { ...(s.payload||{}), userAnswer: userText };
+    await supabase.from('lite_sessions').update({ step: 2, payload }).eq('id', s.id);
+
+    if (s.topic === 'food') {
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:`なるほどにゃ。「${userText}」って、“ちょっとした便利さが嬉しい”感じ？ それとも“趣味のこだわり”っぽい？`,
+        quickReply: qrItems([
+          { label:'便利さ', data:`lite:${s.id}:food:feel_convenience` },
+          { label:'こだわり', data:`lite:${s.id}:food:feel_hobby` },
+          { label:'どちらでもない', data:`lite:${s.id}:food:feel_none` },
+        ]),
+      });
+    } else {
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:`いいにゃ。「${userText}」は、どちらかと言えば“おだやかに過ごす系”？ それとも“アクティブに動く系”？`,
+        quickReply: qrItems([
+          { label:'おだやか', data:`lite:${s.id}:plan:mood_calm` },
+          { label:'アクティブ', data:`lite:${s.id}:plan:mood_active` },
+          { label:'どちらでもない', data:`lite:${s.id}:plan:mood_none` },
+        ]),
+      });
+    }
+    return;
+  }
+
+  // それ以外のテキストはスルー（MVPでは不要な雑応答はしない）
+  return;
+}
+
+// ====== Postback受信（ライト質問のみ） ======
+async function onPostback(event){
+  const data = event.postback?.data || '';
+  if (!data.startsWith('lite:')) {
+    // MVP版ではlite以外のpostbackは無視
+    return;
+  }
+
+  const [_, sessionId, topic, token] = data.split(':'); // lite:<sid>:<topic>:<token>
+  const { data: s } = await supabase.from('lite_sessions').select('*').eq('id', sessionId).single();
+  if (!s) {
+    await client.replyMessage(event.replyToken, { type:'text', text:'セッションが見つからないにゃ…' });
+    return;
+  }
+
+  // STEP0 → “自由テキスト入力へ”
+  if (s.step === 0 && token === 'answer') {
+    await supabase.from('lite_sessions').update({ step: 1 }).eq('id', s.id);
     await client.replyMessage(event.replyToken, {
-      type: 'text',
-      text: '📮 相談フォームはこちらです：\nhttps://forms.gle/xxxxxxxx',
+      type:'text',
+      text: (topic==='food')
+        ? '思い浮かんだ“食べ物の名前”をここに送ってみてにゃ'
+        : 'やりたいことを短く一言で送ってみてにゃ',
     });
     return;
   }
 
-  // ③ 通常対話
-  const message = raw; // 通常処理は正規化前を使用
-  await insertMessage(userId, 'user', message, sessionId);
+  // STEP2（2択） → 小さな行動提案へ
+  if (s.step === 2) {
+    const nextPayload = { ...(s.payload||{}), choice: token };
+    await supabase.from('lite_sessions').update({ step: 3, payload: nextPayload }).eq('id', s.id);
 
-  const history = await fetchHistory(sessionId);
-  const helper = getPromptHelper(message);
-
-  const { data: character, error } = await supabase
-    .from('characters')
-    .select('prompt_template')
-    .eq('name', 'けみー')
-    .single();
-
-  if (error || !character) {
-    console.error('キャラクター設定の取得失敗:', error?.message);
-    await client.replyMessage(event.replyToken, { type: 'text', text: 'いまは少し調子が悪いにゃ…' });
+    if (topic === 'food') {
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'よかったら小さく試してみよ？ 次の買い物で1つだけカゴに入れるか、週末ランチで食べにいくか、どっちにする？',
+        quickReply: qrItems([
+          { label:'次の買い物に追加', data:`lite:${s.id}:food:act_buy` },
+          { label:'週末ランチにする', data:`lite:${s.id}:food:act_lunch` },
+          { label:'今回は見送り', data:`lite:${s.id}:food:act_skip` },
+        ]),
+      });
+    } else {
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'小さく前進させるにゃ。今月のカレンダーに仮で入れるか、画像/リンクを1つだけ送り合うか、どっちにする？',
+        quickReply: qrItems([
+          { label:'カレンダーに仮入れ', data:`lite:${s.id}:plan:act_calendar` },
+          { label:'画像/リンクを共有', data:`lite:${s.id}:plan:act_share` },
+          { label:'今回は見送り', data:`lite:${s.id}:plan:act_skip` },
+        ]),
+      });
+    }
     return;
   }
 
-  const systemPrompt = character.prompt_template;
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: helper },
-      { role: 'user', content: message },
-    ],
-    temperature: 0.7,
-  });
-
-  const rawReply = completion.choices[0].message.content;
-
-  const reformulated = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'system',
-        content: 'あなたは「けみー」の表現アドバイザーです。文を「けみーらしく」やわらかく、問いは1つに絞って整えてください。語尾に「にゃ」が自然に混ざるように。',
-      },
-      { role: 'user', content: rawReply },
-    ],
-    temperature: 0.7,
-  });
-
-  const reply = ensureKemiiStyle(reformulated.choices[0].message.content || 'うんうん、聞いてるにゃ。');
-  await insertMessage(userId, 'assistant', reply, sessionId);
-  await client.replyMessage(event.replyToken, { type: 'text', text: reply });
-}
-
-
-// ------- Postback（診断・セキララ）-------
-async function onPostback(event) {
-  const userId = event.source.userId;
-  const data = event.postback?.data || '';
-
-  try {
-    // 1) 診断フロー（diag:）
-    if (data.startsWith('diag:')) {
-      const payload = data.replace(/^diag:/, '');
-      const [qPart, aPart] = payload.split('&');
-      const questionId = parseInt(qPart.split('=')[1], 10);
-      const answerValue = aPart.split('=')[1];
-
-      const nextQuestion = await processAnswer(userId, questionId, answerValue);
-
-      if (!nextQuestion) {
-        // スコア取得→結果表示
-        const { data: sessions } = await supabase
-          .from('diagnosis_sessions')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('finished', true)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        const session = sessions?.[0];
-        const fileName = calculateDiagnosisResult(session?.scores || {});
-
-        await client.replyMessage(event.replyToken, [
-          { type: 'text', text: '診断が完了したにゃ！結果はこちらだにゃ👇' },
-          {
-            type: 'image',
-            originalContentUrl: `https://あなたのドメイン/images/${fileName}`,
-            previewImageUrl: `https://あなたのドメイン/images/${fileName}`,
-          },
-        ]);
-      } else {
-        // 次の設問を提示
-        await client.replyMessage(event.replyToken, {
-          type: 'text',
-          text: nextQuestion.text,
-          quickReply: {
-            items: nextQuestion.choices.map((choice) => ({
-              type: 'action',
-              action: {
-                type: 'postback',
-                label: choice.label,
-                data: `diag:q=${nextQuestion.id}&a=${choice.value}`,
-              },
-            })),
-          },
-        });
-      }
-
-    // 2) セキララ（deep:）
-    } else if (data.startsWith('deep:')) {
-      const [_, sessionId, token, arg] = data.split(':');
-
-      // セッション取得
-      const { data: s } = await supabase.from('deep_sessions').select('*').eq('id', sessionId).single();
-      if (!s) {
-        await client.replyMessage(event.replyToken, { type:'text', text:'セッションが見つからないにゃ…' });
-        return;
-      }
-
-      // STEP0 → STEP1（範囲）
-      if (s.step === 0) {
-        await supabase.from('deep_sessions').update({ step: 1 }).eq('id', s.id);
-        const { data: tmpl } = await supabase.from('deep_templates').select('s1_choices').eq('topic_key', s.topic_key).single();
-        const items = tmpl.s1_choices.map((label, i) => ({
-          type: 'action', action: { type: 'postback', label, data: `deep:${s.id}:s1:${i}` }
-        }));
-        items.push({ type: 'action', action: { type: 'postback', label: 'パス', data: `deep:${s.id}:pass` }});
-        await client.replyMessage(event.replyToken, {
-          type: 'text',
-          text: 'へぇ〜にゃ。もし思い出すなら、どのあたり？',
-          quickReply: { items }
-        });
-
-      // STEP1（範囲）→ STEP2（ポジ候補）
-      } else if (s.step === 1 && token === 's1') {
-        const domains = ['discipline','study','chores','money','social','health'];
-        const domainKey = domains[Number(arg)] || domains[0];
-
-        await supabase
-          .from('deep_sessions')
-          .update({ step: 2, payload: { ...(s.payload || {}), s1_domain: domainKey } })
-          .eq('id', s.id);
-
-        const { data: tmpl } = await supabase
-          .from('deep_templates')
-          .select('s2_pos_choices')
-          .eq('topic_key', s.topic_key)
-          .single();
-
-        const choices = (tmpl.s2_pos_choices[domainKey] || []).map((label, i) => ({
-          type:'action', action:{ type:'postback', label, data:`deep:${s.id}:s2:${i}` }
-        }));
-        choices.push({ type:'action', action:{ type:'postback', label:'パス', data:`deep:${s.id}:pass` }});
-
-        await client.replyMessage(event.replyToken, {
-          type:'text',
-          text:'その中で“ありがたかった”に近いのは？',
-          quickReply:{ items: choices }
-        });
-
-      // STEP2（ポジの具体） → STEP3（意味付け）
-      } else if (s.step === 2 && token === 's2') {
-        const domain = (s.payload?.s1_domain) || DEEP_DOMAINS[0];
-
-        const { data: tmpl2 } = await supabase
-          .from('deep_templates')
-          .select('s2_pos_choices')
-          .eq('topic_key', s.topic_key)
-          .single();
-
-        const labels = tmpl2?.s2_pos_choices?.[domain] || [];
-        const picked = labels[Number(arg)];
-        await updateSession(s.id, { step: 3, payload: { ...(s.payload||{}), s2_pos: picked }});
-
-        await client.replyMessage(event.replyToken, {
-          type:'text',
-          text:'それって今のあなたのどんな良さにつながってる？',
-          quickReply: qrItems(
-            MEANING_CHOICES.map((lb,i)=>({label:lb, data:`deep:${s.id}:s3:${i}`})).concat([{label:'パス', data:`deep:${s.id}:pass`}])
-          )
-        });
-
-      // STEP3（意味） → STEP4（ネガの具体）
-      } else if (s.step === 3 && token === 's3') {
-        const meaning = MEANING_CHOICES[Number(arg)];
-        await updateSession(s.id, { step: 4, payload: { ...(s.payload||{}), s3_meaning: meaning }});
-
-        const domain = (s.payload?.s1_domain) || DEEP_DOMAINS[0];
-        const { data: tmpl } = await supabase
-          .from('deep_templates')
-          .select('s4_neg_choices')
-          .eq('topic_key', s.topic_key)
-          .single();
-
-        const negs = tmpl?.s4_neg_choices?.[domain] || [];
-        const items = negs.map((lb,i)=>({label:lb, data:`deep:${s.id}:s4:${i}`}));
-        items.push({label:'パス', data:`deep:${s.id}:pass`});
-
-        await client.replyMessage(event.replyToken, {
-          type:'text',
-          text:'反対に“これはちょっと…”に近いのは？',
-          quickReply: qrItems(items)
-        });
-
-      // STEP4（ネガ） → STEP5（影響）
-      } else if (s.step === 4 && token === 's4') {
-        const domain = (s.payload?.s1_domain) || DEEP_DOMAINS[0];
-        const { data: tmpl } = await supabase
-          .from('deep_templates')
-          .select('s4_neg_choices')
-          .eq('topic_key', s.topic_key)
-          .single();
-
-        const negs = tmpl?.s4_neg_choices?.[domain] || [];
-        const picked = negs[Number(arg)];
-        await updateSession(s.id, { step: 5, payload: { ...(s.payload||{}), s4_neg: picked }});
-
-        await client.replyMessage(event.replyToken, {
-          type:'text',
-          text:'それ、今も影響ある？',
-          quickReply: qrItems(IMPACT_CHOICES.map((lb,i)=>({label:lb, data:`deep:${s.id}:s5:${i}`})))
-        });
-
-      // STEP5（影響） → STEP6（リフレーム）
-      } else if (s.step === 5 && token === 's5') {
-        const impact = IMPACT_CHOICES[Number(arg)];
-        await updateSession(s.id, { step: 6, payload: { ...(s.payload||{}), s5_impact: impact }});
-
-        await client.replyMessage(event.replyToken, {
-          type:'text',
-          text:'親の立場を想像すると、どれに近い？',
-          quickReply: qrItems(REFRAME_CHOICES.map((lb,i)=>({label:lb, data:`deep:${s.id}:s6:${i}`})))
-        });
-
-      // STEP6（リフレーム） → STEP7（要約・完了）
-      } else if (s.step === 6 && token === 's6') {
-        const reframe = REFRAME_CHOICES[Number(arg)];
-        const full = { ...(s.payload||{}), s6_reframe: reframe };
-
-        await updateSession(s.id, { step: 7, payload: full });
-
-        const summary = await summarizeDeepResult(s.topic_key, full);
-
-        await supabase.from('deep_runs').insert({
-          group_id: s.group_id,
-          user_id: s.assignee_user_id,
-          topic_key: s.topic_key,
-          results: full,
-          summary_shared: summary
-        });
-
-        await supabase.from('deep_sessions').update({ status:'done' }).eq('id', s.id);
-
-        await client.replyMessage(event.replyToken, {
-          type:'text',
-          text: `${summary}\n\nありがと。今日はここまでにゃ。`
-        });
-
-      // パス／スキップ
-      } else if (token === 'pass' || token === 'skip' || token === 'intro_no') {
-        await supabase.from('deep_sessions').update({ status:'cancelled' }).eq('id', s.id);
-        await client.replyMessage(event.replyToken, { type:'text', text:'今日はここまででOKにゃ。' });
-      }
-
-    // 3) その他のpostbackは無視
-    } else {
-      // 何もしない（黙って無視）
-    }
-
-  } catch (err) {
-    console.error('❌ Postback処理エラー:', err?.message || err);
-    try {
-      await client.replyMessage(event.replyToken, { type: 'text', text: 'エラーが出たにゃ…もう一度だけ試してほしいにゃ' });
-    } catch(e){ /* ignore */ }
+  // STEP3（行動選択） → まとめ
+  if (s.step === 3 && token?.startsWith('act_')) {
+    await supabase.from('lite_sessions').update({ step: 4 }).eq('id', s.id);
+    const summary = (topic === 'food')
+      ? '今日の小さな一歩：次の買い物 or 週末ランチで試すにゃ。数日後にそっと聞くから、気楽にいこう〜'
+      : '今日の小さな一歩：カレンダー仮入れ or 情報1枚の共有にゃ。進んだらそれで十分えらい〜';
+    await client.replyMessage(event.replyToken, { type:'text', text: summary });
+    return;
   }
+
+  // スキップ
+  if (token === 'skip') {
+    await supabase.from('lite_sessions').update({ step: 99 }).eq('id', s.id);
+    await client.replyMessage(event.replyToken, { type:'text', text:'今日はここまででOKにゃ。' });
+    return;
+  }
+
+  // それ以外は何もしない（MVPでは分岐を増やさない）
+  return;
 }
-
-
-// ------- 起動 -------
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
-});
