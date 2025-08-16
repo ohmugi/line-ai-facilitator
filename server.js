@@ -259,28 +259,55 @@ async function getLineProfile(userId) {
   return await resp.json(); // { displayName, userId, pictureUrl, statusMessage }
 }
 
++// --- name state helpers -----------------------------------------------------
++async function getUserState(userId) {
++  const { data } = await supabase
++    .from("users")
++    .select("display_name,name_state,prompted_at")
++    .eq("user_id", userId)
++    .maybeSingle();
++  return data || { name_state: "unset" };
++}
++
++async function markPrompted(userId) {
++  await supabase.from("users")
++    .upsert({ user_id: userId, prompted_at: new Date().toISOString() });
++}
++
++function shouldNudgeAgain(prompted_at, hours = 24) {
++  if (!prompted_at) return true;
++  const last = new Date(prompted_at).getTime();
++  return Date.now() - last > hours * 3600 * 1000;
++}
++
+
 app.post("/webhook", async (req, res) => {
   const events = req.body?.events || [];
   for (const ev of events) {
     try {
-      // 友だち追加時（1:1）
-      if (ev.type === "follow" && ev.source?.type === "user") {
-        const userId = ev.source.userId;
-        const prof = await getLineProfile(userId);
-        // デフォルト候補（LINEの表示名）をチラ見せ
-        await upsertUserPending(userId, prof?.displayName);
-
-        await reply(ev.replyToken, [{
-          type: "text",
-          text:
-            `はじめまして、けみーだよ🐾\n` +
-            `なんて呼べばいいにゃ？（例：「すずき」「あやさん」など）\n` +
-            (prof?.displayName ? `候補：${prof.displayName}\n` : ``) +
-            `※あとで「名前」と送ると変更できるよ`
-        }]);
-        continue;
-      }
-
+     +      // 友だち追加時（1:1）— 登録済みなら聞かずに名前で挨拶、未登録だけお願い
++      if (ev.type === "follow" && ev.source?.type === "user") {
++        const userId = ev.source.userId;
++        const state = await getUserState(userId);
++        if (state.name_state === "set" && state.display_name) {
++          await reply(ev.replyToken, [{
++            type: "text",
++            text: `また会えたね、${state.display_name}さん🐾\n今日もよろしくにゃ。`
++          }]);
++        } else {
++          const prof = await getLineProfile(userId);
++          await upsertUserPending(userId, prof?.displayName);
++          await reply(ev.replyToken, [{
++            type: "text",
++            text:
++              `はじめまして、けみーだよ🐾\n` +
++              `なんて呼べばいいにゃ？（例：「すずき」「あや」など）\n` +
++              (prof?.displayName ? `候補：${prof.displayName}\n` : ``) +
++              `※あとで「名前」と送ると変更できるよ`
++          }]);
++        }
++        continue;
++      }
       // 1:1で名前再設定のコマンド
       if (ev.type === "message" && ev.message?.type === "text" && ev.source?.type === "user") {
         const userId = ev.source.userId;
@@ -343,10 +370,11 @@ if (ev.type === "message" && ev.message?.type === "text" && ev.source?.type === 
   const groupId = ev.source.groupId;
   const userId  = ev.source.userId;
   const text    = ev.message.text.trim();
+  +  const state   = await getUserState(userId);
 
   // 一発指定（例：「名前 すずき」）
   if (text.startsWith("名前 ")) {
-    const want = text.slice("名前 ".length).trim();
+    +    const want = extractDisplayName(text.slice("名前 ".length));
     const saved = await setUserName(userId, want);
     await push(groupId, `了解だにゃ。「${saved}」って呼ぶね！`);
     return res.status(200).end();
@@ -363,15 +391,20 @@ if (ev.type === "message" && ev.message?.type === "text" && ev.source?.type === 
     return res.status(200).end();
   }
 
-  // pending中なら、今回テキストを名前として保存
-  const { data: u } = await supabase.from("users")
-    .select("name_state").eq("user_id", userId).maybeSingle();
-
-  if (u?.name_state === "pending") {
-    const saved = await setUserName(userId, text);
+  +  // pending中なら、今回テキストを「名前だけ」に整形して保存
++  if (state.name_state === "pending") {
++    const saved = await setUserName(userId, extractDisplayName(text));
     await push(groupId, `了解だにゃ。「${saved}」って呼ぶね！`);
     return res.status(200).end();
   }
+  +
++  // 未登録ユーザーが発言：24hに1回だけやさしく案内（連投防止）
++  if (state.name_state !== "set" && shouldNudgeAgain(state.prompted_at)) {
++    await markPrompted(userId);
++    await push(groupId, `よかったら呼び名を決めようかにゃ？「名前 すずき」みたいに送ればOKだよ🐾`);
++    return res.status(200).end();
++  }
+ }
 }
 
 function extractDisplayName(raw) {
@@ -431,97 +464,3 @@ if (u?.name_state === "pending") {
   await push(groupIdOrUserId, `了解だにゃ。「${saved}」って呼ぶね！\n（違ってたらまた「名前」と送ってにゃ）`);
   return res.status(200).end();
 }
-async function getUserState(userId) {
-  const { data } = await supabase
-    .from("users")
-    .select("display_name,name_state,prompted_at")
-    .eq("user_id", userId)
-    .maybeSingle();
-  return data || { name_state: "unset" };
-}
-
-async function markPrompted(userId) {
-  await supabase.from("users")
-    .upsert({ user_id: userId, prompted_at: new Date().toISOString() });
-}
-
-function shouldNudgeAgain(prompted_at, hours = 24) {
-  if (!prompted_at) return true;
-  const last = new Date(prompted_at).getTime();
-  return Date.now() - last > hours * 3600 * 1000;
-}
-if (ev.type === "follow" && ev.source?.type === "user") {
-  const userId = ev.source.userId;
-  const state = await getUserState(userId);
-
-  if (state.name_state === "set" && state.display_name) {
-    await reply(ev.replyToken, [{
-      type: "text",
-      text: `また会えたね、${state.display_name}さん🐾\n今日もよろしくにゃ。`
-    }]);
-    return res.status(200).end();
-  }
-
-  // 未登録：候補を出しつつお願い
-  const prof = await getLineProfile(userId);
-  await upsertUserPending(userId, prof?.displayName);
-  await reply(ev.replyToken, [{
-    type: "text",
-    text:
-      `はじめまして、けみーだよ🐾\n` +
-      `なんて呼べばいいにゃ？（例：「すずき」「あや」など）\n` +
-      (prof?.displayName ? `候補：${prof.displayName}\n` : ``) +
-      `※あとで「名前」と送ると変更できるよ`
-  }]);
-  return res.status(200).end();
-}
-if (ev.type === "join" && ev.source?.type === "group") {
-  await push(ev.source.groupId,
-    "けみーだよ🐾 よろしくね！\n" +
-    "呼び名を決めたい人は「名前」と送ってから次の発言に希望の呼び名を書いてね。\n" +
-    "一発で決めるなら「名前 すずき」でもOKだにゃ。"
-  );
-  return res.status(200).end();
-}
-if (ev.type === "message" && ev.message?.type === "text" && ev.source?.type === "group") {
-  const groupId = ev.source.groupId;
-  const userId  = ev.source.userId;
-  const text    = ev.message.text.trim();
-
-  // 既存：一発指定
-  if (text.startsWith("名前 ")) {
-    const want  = extractDisplayName(text.slice("名前 ".length));
-    const saved = await setUserName(userId, want);
-    await push(groupId, `了解だにゃ。「${saved}」って呼ぶね！`);
-    return res.status(200).end();
-  }
-
-  // 既存：「名前」→ pending
-  if (text === "名前") {
-    const prof = await getGroupMemberProfile(groupId, userId);
-    await upsertUserPending(userId, prof?.displayName);
-    await push(groupId,
-      `新しい呼び名を教えてにゃ（20文字まで）\n` +
-      (prof?.displayName ? `候補：${prof.displayName}` : "")
-    );
-    return res.status(200).end();
-  }
-
-  // 既存：pending 中なら今回のテキストを登録
-  const state = await getUserState(userId);
-  if (state.name_state === "pending") {
-    const saved = await setUserName(userId, extractDisplayName(text));
-    await push(groupId, `了解だにゃ。「${saved}」って呼ぶね！`);
-    return res.status(200).end();
-  }
-
-  // ☆追加：未登録ユーザーが発言したときにだけ、24hに1回だけやさしく案内
-  if (state.name_state !== "set" && shouldNudgeAgain(state.prompted_at)) {
-    await markPrompted(userId);
-    await push(groupId, `よかったら呼び名を決めようかにゃ？「名前 すずき」みたいに送ればOKだよ🐾`);
-    return res.status(200).end();
-  }
-
-  // （この下にセキララ等の既存ロジック）
-}
-
