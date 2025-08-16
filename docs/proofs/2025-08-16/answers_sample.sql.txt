@@ -1,0 +1,19 @@
+-- 回答
+create table if not exists answers (
+  id uuid primary key default gen_random_uuid(),
+  group_id text not null,
+  user_id text not null,
+  question_id text not null,
+  text text not null,
+  created_at timestamptz not null default now(),
+  unique (group_id, user_id, question_id)  -- 最初の回答だけ受理
+);
+
+-- AI要約
+create table if not exists ai_summaries (
+  id uuid primary key default gen_random_uuid(),
+  group_id text not null,
+  question_id text not null,
+  summary_text text not null,
+  created_at timestamptz not null default now()
+);
