@@ -23,7 +23,7 @@ function verifyLineSignature(req) {
   const signature = req.headers["x-line-signature"];
   const body = JSON.stringify(req.body);
   const hmac = crypto
-    .createHmac("sha256", LINE_CHANNEL_SECRET)
+    .createHmac("sha256", CHANNEL_SECRET)
     .update(body).digest("base64");
   return signature === hmac;
 }
@@ -185,7 +185,7 @@ async function reply(replyToken, messages) {
   await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+      "Authorization": `Bearer ${CHANNEL_ACCESS_TOKEN}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({ replyToken, messages })
@@ -196,7 +196,7 @@ async function push(to, text) {
   await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+      "Authorization": `Bearer ${CHANNEL_ACCESS_TOKEN}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
