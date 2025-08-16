@@ -186,6 +186,171 @@ async function fetchHistory(sessionId) {
   );
 }
 
+  // ★ ライト質問ユーティリティ（server.js内のユーティリティ群の下あたりに追記）
+async function startLiteTopic(groupId, assigneeUserId, topic){ // 'food' | 'plan'
+  const { data: ins, error } = await supabase
+    .from('lite_sessions')
+    .insert({ group_id: groupId, assignee_user_id: assigneeUserId, topic, step: 0, payload: {} })
+    .select('id')
+    .single();
+  if (error) { console.error('startLiteTopic error', error.message); return; }
+
+  const sid = ins.id;
+  if (topic === 'food'){
+    // Q1: はまっている食べ物
+    await client.pushMessage(groupId, {
+      type: 'text',
+      text: 'もし最近の相手の“はまっている食べ物”を当てるなら？',
+      quickReply:{
+        items:[
+          { type:'action', action:{ type:'postback', label:'考える', data:`lite:${sid}:food:answer` } },
+          { type:'action', action:{ type:'postback', label:'また今度', data:`lite:${sid}:skip` } }
+        ]
+      }
+    });
+  } else {
+    // Q2: 今年中に一緒にしたいこと
+    await client.pushMessage(groupId, {
+      type:'text',
+      text:'今年中に「一緒にやりたいこと」を一つだけ挙げるなら？',
+      quickReply:{
+        items:[
+          { type:'action', action:{ type:'postback', label:'考える', data:`lite:${sid}:plan:answer` } },
+          { type:'action', action:{ type:'postback', label:'また今度', data:`lite:${sid}:skip` } }
+        ]
+      }
+    });
+  }
+}
+
+// ★ onText() 内：起動ワードの分岐（「セキララ」分岐のすぐ下あたりに追記）
+if (/^ライト1$/i.test(text)) {
+  await startLiteTopic(isGroup ? event.source.groupId : userId, userId, 'food');
+  return;
+}
+if (/^ライト2$/i.test(text)) {
+  await startLiteTopic(isGroup ? event.source.groupId : userId, userId, 'plan');
+  return;
+}
+
+// ★ onPostback() 内：deep: 分岐の“直前”に追記
+else if (data.startsWith('lite:')) {
+  const [_, sessionId, topic, token] = data.split(':');
+
+  // セッション取得
+  const { data: s } = await supabase.from('lite_sessions').select('*').eq('id', sessionId).single();
+  if (!s) {
+    await client.replyMessage(event.replyToken, { type:'text', text:'セッションが見つからないにゃ…' });
+    return;
+  }
+
+  // ステップ進行
+  // STEP0 → ユーザーの自由回答受け付け
+  if (s.step === 0 && (token === 'answer')) {
+    await supabase.from('lite_sessions').update({ step: 1 }).eq('id', s.id);
+    await client.replyMessage(event.replyToken, {
+      type:'text',
+      text: (topic==='food')
+        ? '思い浮かんだ“食べ物の名前”をここに送ってみてにゃ'
+        : 'やりたいことを短く一言で送ってみてにゃ'
+    });
+    return;
+  }
+
+  // STEP1 → “仮説提示＋選択肢化”（ズレても訂正しやすい2択）
+  if (s.step === 1 && event.type === 'message' && event.message?.type === 'text') {
+    const userText = (event.message.text || '').trim();
+    const payload = { ...(s.payload||{}), userAnswer: userText };
+    await supabase.from('lite_sessions').update({ step: 2, payload }).eq('id', s.id);
+
+    if (topic === 'food') {
+      // 便利 or こだわり の2択（抽象問避け）
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:`なるほどにゃ。「${userText}」って、“ちょっとした便利さが嬉しい”感じ？ それとも“趣味のこだわり”っぽい？`,
+        quickReply:{
+          items:[
+            { type:'action', action:{ type:'postback', label:'便利さ', data:`lite:${s.id}:food:feel_convenience` } },
+            { type:'action', action:{ type:'postback', label:'こだわり', data:`lite:${s.id}:food:feel_hobby` } },
+            { type:'action', action:{ type:'postback', label:'どちらでもない', data:`lite:${s.id}:food:feel_none` } }
+          ]
+        }
+      });
+    } else {
+      // 気分：おだやか or アクティブ の2択（具体的対比）
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:`いいにゃ。「${userText}」は、どちらかと言えば“おだやかに過ごす系”？ それとも“アクティブに動く系”？`,
+        quickReply:{
+          items:[
+            { type:'action', action:{ type:'postback', label:'おだやか', data:`lite:${s.id}:plan:mood_calm` } },
+            { type:'action', action:{ type:'postback', label:'アクティブ', data:`lite:${s.id}:plan:mood_active` } },
+            { type:'action', action:{ type:'postback', label:'どちらでもない', data:`lite:${s.id}:plan:mood_none` } }
+          ]
+        }
+      });
+    }
+    return;
+  }
+
+  // STEP2 → “次アクション提案”（小さく具体）
+  if (s.step === 2 && token) {
+    const nextPayload = { ...(s.payload||{}), choice: token };
+    await supabase.from('lite_sessions').update({ step: 3, payload: nextPayload }).eq('id', s.id);
+
+    if (topic === 'food') {
+      // 行動提案：次の買い物 or 週末ランチ
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'よかったら小さく試してみよ？ 次の買い物で1つだけカゴに入れるか、週末ランチで食べにいくか、どっちにする？',
+        quickReply:{
+          items:[
+            { type:'action', action:{ type:'postback', label:'次の買い物に追加', data:`lite:${s.id}:food:act_buy` } },
+            { type:'action', action:{ type:'postback', label:'週末ランチにする', data:`lite:${s.id}:food:act_lunch` } },
+            { type:'action', action:{ type:'postback', label:'今回は見送り', data:`lite:${s.id}:food:act_skip` } }
+          ]
+        }
+      });
+    } else {
+      // 行動提案：今月のカレンダー or 情報1枚共有
+      await client.replyMessage(event.replyToken, {
+        type:'text',
+        text:'小さく前進させるにゃ。今月のカレンダーに仮で入れるか、画像/リンクを1つだけ送り合うか、どっちにする？',
+        quickReply:{
+          items:[
+            { type:'action', action:{ type:'postback', label:'カレンダーに仮入れ', data:`lite:${s.id}:plan:act_calendar` } },
+            { type:'action', action:{ type:'postback', label:'画像/リンクを共有', data:`lite:${s.id}:plan:act_share` } },
+            { type:'action', action:{ type:'postback', label:'今回は見送り', data:`lite:${s.id}:plan:act_skip` } }
+          ]
+        }
+      });
+    }
+    return;
+  }
+
+  // STEP3 → まとめ＋回収リマインド文言（保存想定）
+  if (s.step === 3 && token?.startsWith('act_')) {
+    const done = token.replace(/^.*:/,''); // act_xxx
+    await supabase.from('lite_sessions').update({ step: 4 }).eq('id', s.id);
+
+    const summary = (s.topic==='food')
+      ? '今日の小さな一歩：次の買い物 or 週末ランチで試すにゃ。数日後にそっと聞くから、気楽にいこう〜'
+      : '今日の小さな一歩：カレンダー仮入れ or 情報1枚の共有にゃ。進んだらそれで十分えらい〜';
+
+    await client.replyMessage(event.replyToken, { type:'text', text: summary });
+    return;
+  }
+
+  // スキップ系
+  if (token === 'skip'){
+    await supabase.from('lite_sessions').update({ step: 99 }).eq('id', s.id);
+    await client.replyMessage(event.replyToken, { type:'text', text:'今日はここまででOKにゃ。' });
+    return;
+  }
+
+  return;
+}
+
 // ------- Webhook -------
 
 // BEGIN AI EDIT: webhook-handler
@@ -359,6 +524,8 @@ async function onPostback(event) {
     return; // ← このreturnは関数内なので合法
   }
   // ↑ ここで"diag:"ブロックが完全に閉じていることが重要（波カッコ対応）
+
+
 
   // セキララ（deep）フロー: "deep:<SESSION_ID>:s1:<index>" など
   else if (data.startsWith('deep:')) {
