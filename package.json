@@ -4,8 +4,13 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
-  },
+  "dev": "node server.js",
+  "start": "node server.js",
+  "health": "curl -sS https://<your>.onrender.com/health || true",
+  "version": "curl -sS https://<your>.onrender.com/version || true",
+  "lint": "eslint .",
+  "format": "prettier -w ."
+},
   "engines": {
     "node": "20.x"
   },
