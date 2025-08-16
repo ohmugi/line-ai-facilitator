@@ -52,7 +52,7 @@ app.post("/webhook", async (req, res) => {
         const groupId = source.groupId;
 
         // コマンドで質問を投下
-        if (text === "/sekirara start") {
+        if (text === "セキララ") {
           await reply(ev.replyToken, [
             {
               type: "text",
