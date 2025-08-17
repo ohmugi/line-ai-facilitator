@@ -60,6 +60,36 @@ async function getGroupMemberProfile(groupId, userId) {
   return await resp.json();
 }
 
+// グループのメンバーID一覧（最大200件、必要数だけ） 
+async function getGroupMemberIds(groupId, limit = 10) {
+  const url = `https://api.line.me/v2/bot/group/${groupId}/members/ids`;
+  let start = null, ids = [];
+  while (ids.length < limit) {
+    const resp = await fetch(start ? `${url}?start=${start}` : url, {
+      headers: { Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN || process.env.LINE_CHANNEL_ACCESS_TOKEN}` }
+    });
+    if (!resp.ok) break;
+    const json = await resp.json(); // { memberIds:[], next? }
+    ids.push(...(json.memberIds || []));
+    if (!json.next) break;
+    start = json.next;
+  }
+  return ids.slice(0, limit);
+}
+
+// メンション付テキストを作る（表示名を先頭に置き、そこをメンション） 
+async function buildMentionMessage(groupId, userId, afterText) {
+  const prof = await getGroupMemberProfile(groupId, userId);
+  const name = (prof?.displayName || "あなた").slice(0, 20);
+  const text = `${name}さん ${afterText}`;
+  return {
+    type: "text",
+    text,
+    mention: { mentionees: [{ index: 0, length: `${name}さん`.length, userId }] }
+  };
+}
+
+
 function extractDisplayName(raw) {
   if (!raw) return "";
   let t = raw.trim();
@@ -263,7 +293,33 @@ app.post("/webhook", async (req, res) => {
           }
 
           if (text === TRIGGER) {
-            await reply(ev.replyToken, [{ type: "text", text: `【セキララ質問】\n${QUESTION_TEXT}\n\nこのスレッドでは、各自“最初の回答”だけ保存します。` }]);
+           // 既存ランがあればキャンセル（安全運用・上書き開始）
+            await supabase.from("question_runs")
+              .upsert({ group_id: groupId, question_id: QUESTION_ID, targets: [], idx: 0, status: "canceled" });
+
+            // グループのメンバーから「人」を2名抽出
+            let memberIds = await getGroupMemberIds(groupId, 10);
+            // ボット自身のIDは含まれない仕様だが、保険として userId 不要の空文字は除外
+            memberIds = memberIds.filter(Boolean);
+            // “夫婦想定”として先頭2名（必要ならここに除外ルールを足せます）
+            const targets = memberIds.slice(0, 2);
+
+            if (targets.length < 2) {
+              await reply(ev.replyToken, [{ type: "text", text: "参加者が足りないみたい。2人以上のグループで試してね🐾" }]);
+              continue;
+            }
+
+            // ランを保存して1人目にメンションで質問
+            await supabase.from("question_runs").upsert({
+              group_id: groupId, question_id: QUESTION_ID,
+              targets, idx: 0, status: "active"
+            });
+
+            await push(groupId, [
+              { type: "text", text: `【セキララ質問】\n${QUESTION_TEXT}\n\n順番にお聞きします。各自“最初の回答”だけ保存します。` },
+            ]);
+            const msg = await buildMentionMessage(groupId, targets[0], "まずはあなたから、一言でどうぞ！");
+            await push(groupId, [msg]);
             continue;
           }
 
@@ -276,6 +332,34 @@ app.post("/webhook", async (req, res) => {
             await supabase.from("answers").insert({ group_id: groupId, user_id: userIdAns, question_id: QUESTION_ID, text });
             const disp = await getDisplayName(userIdAns);
             await push(groupId, disp ? `${disp}さん、回答ありがとう！（最初の1回だけ保存するよ）` : "回答を受け取りました（最初の1回だけ保存します）");
+
+            // ☆ 順番ランの進行（自分の番だったら次の人へメンション）
+const { data: run } = await supabase
+  .from("question_runs")
+  .select("targets, idx, status")
+  .eq("group_id", groupId)
+  .eq("question_id", QUESTION_ID)
+  .maybeSingle();
+
+if (run && run.status === "active" && Array.isArray(run.targets)) {
+  const { targets, idx } = run;
+  if (targets[idx] === userIdAns) {
+    const nextIdx = idx + 1;
+    if (nextIdx < targets.length) {
+      await supabase.from("question_runs")
+        .update({ idx: nextIdx })
+        .eq("group_id", groupId).eq("question_id", QUESTION_ID);
+      const msg2 = await buildMentionMessage(groupId, targets[nextIdx], "あなたの番だよ。教えてにゃ！");
+      await push(groupId, [msg2]);
+    } else {
+      // 全員回ったら終了扱い
+      await supabase.from("question_runs")
+        .update({ status: "done" })
+        .eq("group_id", groupId).eq("question_id", QUESTION_ID);
+    }
+  }
+}
+
 
             const { data: rows } = await supabase.from("answers").select("user_id,text,created_at").eq("group_id", groupId).eq("question_id", QUESTION_ID).order("created_at", { ascending: true });
             if (rows && rows.length >= 2) {
