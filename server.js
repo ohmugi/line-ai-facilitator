@@ -1,13 +1,16 @@
 
-//変更後｜// server.js（最小構成・見守りMVPオンリー）
-
 import express from 'express';
 import bodyParser from 'body-parser';
 import { middleware, Client } from '@line/bot-sdk';
 
 const app = express();
-app.use(bodyParser.json());
-app.use(bodyParser.raw({ type: 'application/json' })); // LINE署名検証向け（必要なら）
+// LINEの署名検証は「生ボディ」が必要。raw を最優先で一括適用
+app.use(bodyParser.raw({ type: '*/*' }));
+
+// ヘルスチェック用（PaaSの監視はここを見る想定）
+app.get('/', (_, res) => res.status(200).send('ok'));
+app.get('/healthz', (_, res) => res.status(200).json({ ok: true }));
+app.head('/webhook', (_, res) => res.status(200).end());
 
 // --- LINE設定 ---
 const config = {
@@ -194,4 +197,5 @@ async function onPostback(event){
 
 // --- 起動 ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Kemii MVP listening on ${PORT}`));
+const HOST = '0.0.0.0';
+app.listen(PORT, HOST, () => console.log(`Kemii MVP listening on ${HOST}:${PORT}`));
