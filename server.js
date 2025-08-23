@@ -81,12 +81,26 @@ function numberButtons(){
   }));
 }
 
-// --- Webhook ---
-app.post('/webhook', middleware(config), async (req, res) => {
-  const events = req.body.events || [];
-  await Promise.all(events.map(handleEvent));
-  res.status(200).end();
-});
+
+// 全体はJSONで処理
+app.use(express.json());
+
+// LINE署名検証が必要な /webhook だけ RAW を適用
+app.post('/webhook',
+  bodyParser.raw({ type: '*/*' }),
+  middleware(config),
+  async (req, res) => {
+    const events = req.body.events || [];
+    try {
+      await Promise.all(events.map(handleEvent));
+      res.status(200).end();
+    } catch (e) {
+      console.error('❌ Webhook error:', e?.response?.data || e.message || e);
+      res.status(200).end();
+    }
+  }
+);
+
 
 async function handleEvent(event){
   if (event.type==='message' && event.message?.type==='text') return onText(event);
@@ -198,4 +212,7 @@ async function onPostback(event){
 // --- 起動 ---
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
+// --- health check & root ---
+app.get('/', (_req, res) => res.status(200).send('Kemii MVP OK'));
+app.get('/healthz', (_req, res) => res.status(200).json({ status: 'ok' }));
 app.listen(PORT, HOST, () => console.log(`Kemii MVP listening on ${HOST}:${PORT}`));
