@@ -4,8 +4,6 @@ import bodyParser from 'body-parser';
 import { middleware, Client } from '@line/bot-sdk';
 
 const app = express();
-// LINEの署名検証は「生ボディ」が必要。raw を最優先で一括適用
-app.use(bodyParser.raw({ type: '*/*' }));
 
 // ヘルスチェック用（PaaSの監視はここを見る想定）
 app.get('/', (_, res) => res.status(200).send('ok'));
@@ -84,6 +82,11 @@ function numberButtons(){
 
 // 全体はJSONで処理
 app.use(express.json());
+app.post('/webhook',
+  bodyParser.raw({ type: '*/*' }),
+  middleware(config),
+  async (req, res) => { /* 既存のまま */ }
+);
 
 // LINE署名検証が必要な /webhook だけ RAW を適用
 app.post('/webhook',
