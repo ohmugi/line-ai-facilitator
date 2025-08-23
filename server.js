@@ -87,18 +87,37 @@ function intensityBucket(n) {
   if (n <= 8) return 7;
   return 10;
 }
-function emotionButtons() {
-  const items = EMOTIONS.map(m => ({
-    type:'action',
-    action:{ type:'postback', label:`${m.e}${m.l}`, data:`ef:emo:${m.k}` }
-  }));
-  items.push({ type:'action', action:{ type:'postback', label:'❓どれでもない', data:'ef:other' }});
-  return items;
+function buildEmotionCarousel(codes){
+  const columns = codes.slice(0,4).map(k => {
+    const m = EMOTIONS.find(x=>x.k===k);
+    return {
+      thumbnailImageUrl: 'https://dummyimage.com/600x400/ffffff/000.png&text=kemii',
+      title: m.l,
+      text: '当てはまらなければ「どれでもない」で自由入力OKだよ',
+      actions: [
+        { type:'postback', label:'これにする', data:`ef:emo:${k}`, displayText:`${m.l}` }
+      ]
+    };
+  });
+  // “どれでもない”専用カラム
+  columns.push({
+    thumbnailImageUrl: 'https://dummyimage.com/600x400/ffffff/000.png&text=?',
+    title: 'どれでもない',
+    text: '自由に入力してOKだよ（短くで大丈夫）',
+    actions: [{ type:'postback', label:'自由入力する', data:'ef:other', displayText:'どれでもない' }]
+  });
+  return { type:'template', altText:'感情を選んでね', template:{ type:'carousel', columns } };
 }
-function numberButtons() {
-  return Array.from({ length: 10 }, (_, i) => i + 1).map(n => ({
-    type:'action', action:{ type:'postback', label:String(n), data:`ef:int:${n}` }
-  }));
+function buildIntensityButtons(code){
+  const make = n => ({ type:'postback', label:String(n), data:`ef:int:${n}`, displayText:`${n}` });
+  return {
+    type:'template',
+    altText:'強さを選んでね',
+    template:{ type:'buttons', title:'強さ（1/3/5/7/10）', text: GUIDE[code] ? '1=弱い / 5=けっこう / 10=とても（説明は上のテキスト参照）' : '1/3/5/7/10から選んでね', actions:[make(1),make(3),make(5),make(7),] }
+  };
+}
+function buildIntensityButton10(code){
+  return { type:'template', altText:'さらに強い？', template:{ type:'buttons', title:'最高レベル？', text:'最高なら「10」を選んでね', actions:[{ type:'postback', label:'10', data:`ef:int:10`, displayText:'10' }] } };
 }
 
 // ---- Webhook（LINE署名検証のため raw パーサをこのルートだけに適用）----
@@ -164,11 +183,11 @@ async function onText(event) {
     // 共感表示＋極性ログ
     await logEvent('empathy_shown', { polarity: empathy.includes('うれ') ? 'pos' : 'neg' });
 
-    await client.replyMessage(event.replyToken, {
-      type:'text',
-      text: empathy,
-      quickReply:{ items:[{ type:'action', action:{ type:'postback', label:'つづける', data:'ef:pick' }}] }
-    });
+    await client.replyMessage(event.replyToken, { type:'text', text: empathy + ' にゃ。' });
+const cand = await suggestEmotionCodes(text); // 新規
+await client.pushMessage(gid, { type:'text', text:'近い気持ちを1つ選んでね（当てはまらなければ「どれでもない」→自由入力OK）' });
+await client.pushMessage(gid, buildEmotionCarousel(cand));
+sessions.set(gid, { step:3, payload:{ utter:text, db_session_id: dbSessionId }});
     return;
   }
 
@@ -189,17 +208,40 @@ async function onText(event) {
     }
     await logEvent('emotion_chosen', { label: 'other', custom: otherLabel });
 
-    await client.replyMessage(event.replyToken, {
-      type:'text',
-      text:'その気持ちはどれくらい強かった？（1〜10）',
-      quickReply:{ items: numberButtons() }
-    });
+    const label = EMOTIONS.find(e=>e.k===ek)?.l || (s.payload?.other_label || 'その気持ち');
+const guide = GUIDE[ek] ? `\n例）1:${GUIDE[ek][1]} / 5:${GUIDE[ek][5]} / 10:${GUIDE[ek][10]}` : '';
+await client.replyMessage(replyToken, { type:'text', text:`${label} の強さはどれくらい？${guide}` });
+await client.pushMessage(gid, buildIntensityButtons(ek));
+await client.pushMessage(gid, buildIntensityButton10(ek));
     return;
   }
 
   // それ以外のテキストは誘導維持
-  await client.replyMessage(event.replyToken, { type:'text', text:'近い気持ちを1つ選んでね' });
+  await client.replyMessage(replyToken, { type:'text', text:'当てはまらないときは、いちばん近い“気持ちの名前”を自由入力してね（短くでOK）' });
 }
+
+// 追加（OpenAIで文脈抽出）— ファイル上部でOpenAIクライアントをimport済み前提
+import { OpenAI } from 'openai';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+async function suggestEmotionCodes(utter){
+  const codes = EMOTIONS.map(e=>e.k);
+  const prompt = `次の文章に近い感情ラベル（${codes.join(',')}）から上位3つを日本語なし・カンマ区切りで返して: ${utter}`;
+  try{
+    const r = await openai.chat.completions.create({
+      model:'gpt-4o',
+      messages:[{role:'user', content:prompt}],
+      temperature:0.2,
+    });
+    const raw = (r.choices?.[0]?.message?.content||'').trim();
+    const picked = raw.split(',').map(s=>s.trim()).filter(k=>codes.includes(k));
+    return picked.length ? picked : ['joy','relief','hazy'];
+  }catch(e){
+    console.error('suggestEmotionCodes error:', e?.message||e);
+    return ['joy','relief','hazy'];
+  }
+}
+
 
 // ---- Postback（感情・強さの選択）----
 async function onPostback(event) {
