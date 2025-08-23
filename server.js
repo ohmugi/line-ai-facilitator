@@ -75,10 +75,24 @@ function brief(text, max = 25) {
   const s = t.split('。')[0] || t;
   return s.slice(0, max);
 }
-function empathyLine(text) {
-  const posHint = /うれ|嬉|助か|安心|良|ほっと|ありがとう|感謝|ワクワク|楽し/.test(text || '');
-  return posHint ? 'それはうれしかったね' : 'それは大変だったね';
+// OpenAIで毎回“自然な共感”を生成
+import { OpenAI } from 'openai';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+async function generateEmpathy(message){
+  const prompt = `次の発話に、1〜2文の自然な共感を返してください。
+・内容がポジなら「おめでとう！うれしいね」等
+・ネガなら「大変だったね」等
+・中立なら「そっか」等
+・語尾は自然（〜ね／〜だね／〜かも）。「にゃ」は無理に付けない。
+発話: ${message}`;
+  const r = await openai.chat.completions.create({
+    model:'gpt-4o-mini', temperature:0.3,
+    messages:[{role:'user', content: prompt}]
+  });
+  return (r.choices?.[0]?.message?.content || 'そっか、そうだったんだね').trim();
 }
+
 function intensityBucket(n) {
   if ([1,3,5,7,10].includes(n)) return n;
   if (n <= 2) return 1;
@@ -162,7 +176,7 @@ async function onText(event) {
 
     // S2: 共感応答 → つづける
     await logEvent('message_received', { length: text.length, at: Date.now() });
-    const empathy = empathyLine(text);
+const empathy = await generateEmpathy(text);
 
     // DB: セッションrow（S2状態で保存）
     let dbSessionId = null;
@@ -183,12 +197,12 @@ async function onText(event) {
     // 共感表示＋極性ログ
     await logEvent('empathy_shown', { polarity: empathy.includes('うれ') ? 'pos' : 'neg' });
 
-    await client.replyMessage(event.replyToken, { type:'text', text: empathy + ' にゃ。' });
-const cand = await suggestEmotionCodes(text); // 新規
+    await client.replyMessage(event.replyToken, { type:'text', text: empathy });
+const cand = await suggestEmotionCodes(text);
 await client.pushMessage(gid, { type:'text', text:'近い気持ちを1つ選んでね（当てはまらなければ「どれでもない」→自由入力OK）' });
 await client.pushMessage(gid, buildEmotionCarousel(cand));
 sessions.set(gid, { step:3, payload:{ utter:text, db_session_id: dbSessionId }});
-    return;
+return;
   }
 
   // 「どれでもない」後の自由入力（感情の自由語）
@@ -210,7 +224,7 @@ sessions.set(gid, { step:3, payload:{ utter:text, db_session_id: dbSessionId }})
 
     const label = EMOTIONS.find(e=>e.k===ek)?.l || (s.payload?.other_label || 'その気持ち');
 const guide = GUIDE[ek] ? `\n例）1:${GUIDE[ek][1]} / 5:${GUIDE[ek][5]} / 10:${GUIDE[ek][10]}` : '';
-await client.replyMessage(replyToken, { type:'text', text:`${label} の強さはどれくらい？${guide}` });
+await client.replyMessage(event.replyToken, { type:'text', text:`${label} の強さはどれくらい？${guide}` });
 await client.pushMessage(gid, buildIntensityButtons(ek));
 await client.pushMessage(gid, buildIntensityButton10(ek));
     return;
@@ -265,32 +279,26 @@ async function onPostback(event) {
   }
 
   if (cmd === 'other') {
-    sessions.set(gid, { step: 3, payload: { ...s.payload, emotion_key: 'other' } });
-    await client.replyMessage(replyToken, { type:'text', text:'どんな気持ちにいちばん近い？短くでOKだよ' });
-    return;
-  }
+  sessions.set(gid, { step: 3, payload: { ...s.payload, emotion_key: 'other' } });
+  await client.replyMessage(event.replyToken, { type:'text', text:'当てはまらないときは、いちばん近い“気持ちの名前”を自由入力してね（短くでOK）' });
+  return;
+}
+
 
   if (cmd === 'emo') {
-    const ek = arg;
-    const nextPayload = { ...s.payload, emotion_key: ek };
-    sessions.set(gid, { step: 4, payload: nextPayload });
+  // …状態更新＆DB更新…
+  const ek = arg;
+  const label = ek === 'other'
+    ? (s.payload?.other_label || 'その気持ち')
+    : (EMOTIONS.find(e=>e.k===ek)?.l || 'その気持ち');
 
-    if (s.payload?.db_session_id) {
-      await safeUpdate(
-        'empathy_sessions',
-        { step: 4, payload: nextPayload },
-        { id: s.payload.db_session_id }
-      );
-    }
-    await logEvent('emotion_chosen', { label: ek });
+  const guide = GUIDE[ek] ? `\n例）1:${GUIDE[ek][1]} / 5:${GUIDE[ek][5]} / 10:${GUIDE[ek][10]}` : '';
+  await client.replyMessage(replyToken, { type:'text', text:`${label} の強さはどれくらい？${guide}` });
+  await client.pushMessage(gid, buildIntensityButtons(ek));
+  await client.pushMessage(gid, buildIntensityButton10(ek));
+  return;
+}
 
-    await client.replyMessage(replyToken, {
-      type:'text',
-      text:'その気持ちはどれくらい強かった？（1〜10）',
-      quickReply:{ items: numberButtons() }
-    });
-    return;
-  }
 
   if (cmd === 'int') {
     const n = Number(arg);
