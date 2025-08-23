@@ -275,6 +275,7 @@ await client.replyMessage(replyToken, {
   await client.replyMessage(replyToken, { type:'text', text: summary });
   return;
 }
+  }
 
 // --- 起動 ---
 const PORT = process.env.PORT || 3000;
