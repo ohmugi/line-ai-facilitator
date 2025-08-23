@@ -2,13 +2,11 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import { middleware, Client } from '@line/bot-sdk';
+import { createClient } from '@supabase/supabase-js';
 
 const app = express();
 
-// ヘルスチェック用（PaaSの監視はここを見る想定）
-app.get('/', (_, res) => res.status(200).send('ok'));
-app.get('/healthz', (_, res) => res.status(200).json({ ok: true }));
-app.head('/webhook', (_, res) => res.status(200).end());
+
 
 // --- LINE設定 ---
 const config = {
@@ -16,6 +14,25 @@ const config = {
   channelSecret: process.env.CHANNEL_SECRET,
 };
 const client = new Client(config);
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  // サーバ側は Service Role を推奨（RLSを気にしない）
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY
+);
+
+// 失敗しても体験は続行するログ関数
+async function safeInsert(table, values){
+  try { await supabase.from(table).insert(values); }
+  catch(e){ console.error(`[DB] insert ${table} fail:`, e?.message || e); }
+}
+async function safeUpdate(table, patch, match){
+  try { await supabase.from(table).update(patch).match(match); }
+  catch(e){ console.error(`[DB] update ${table} fail:`, e?.message || e); }
+}
+async function logEvent(event, meta){
+  await safeInsert('empathy_logs', { event, meta });
+}
 
 // --- セッション（超簡易：メモリ保持）---
 // key: groupId(or userId)
@@ -85,13 +102,6 @@ app.use(express.json());
 app.post('/webhook',
   bodyParser.raw({ type: '*/*' }),
   middleware(config),
-  async (req, res) => { /* 既存のまま */ }
-);
-
-// LINE署名検証が必要な /webhook だけ RAW を適用
-app.post('/webhook',
-  bodyParser.raw({ type: '*/*' }),
-  middleware(config),
   async (req, res) => {
     const events = req.body.events || [];
     try {
@@ -125,25 +135,54 @@ async function onText(event){
       return;
     }
     // S2: 共感応答 → つづける
-    const empathy = empathyLine(text);
-    sessions.set(gid, { step:2, payload:{ utter:text }});
-    await client.replyMessage(event.replyToken, {
-      type:'text',
-      text: empathy,
-      quickReply:{ items:[{ type:'action', action:{ type:'postback', label:'つづける', data:'ef:pick' }}] }
-    });
+await logEvent('message_received', { length: text.length, at: Date.now() });
+const empathy = empathyLine(text);
+
+// DB: セッションrowを作成（S2状態で保存）
+let dbSessionId = null;
+try{
+  const { data, error } = await supabase
+    .from('empathy_sessions')
+    .insert({ group_id: gid, user_id: event.source.userId, step: 2, payload: { utter: text } })
+    .select('id')
+    .single();
+  if (!error) dbSessionId = data.id;
+}catch(e){ console.error('[DB] create session fail:', e?.message || e); }
+
+// メモリ側にもDBのidを保持
+sessions.set(gid, { step:2, payload:{ utter:text, db_session_id: dbSessionId }});
+
+// 共感表示＋極性ログ
+await logEvent('empathy_shown', { polarity: empathy.includes('うれ') ? 'pos' : 'neg' });
+
+await client.replyMessage(event.replyToken, {
+  type:'text',
+  text: empathy,
+  quickReply:{ items:[{ type:'action', action:{ type:'postback', label:'つづける', data:'ef:pick' }}] }
+});
     return;
   }
 
   // 「どれでもない」後の自由入力
   if (s.step===3 && s.payload?.emotion_key==='other'){
     const ek = 'other';
-    sessions.set(gid, { step:4, payload:{ ...s.payload, emotion_key:ek, other_label:text.slice(0,10) }});
-    await client.replyMessage(event.replyToken, {
-      type:'text',
-      text:'その気持ちはどれくらい強かった？（1〜10）',
-      quickReply:{ items: numberButtons() }
-    });
+const otherLabel = text.slice(0,10);
+sessions.set(gid, { step:4, payload:{ ...s.payload, emotion_key:ek, other_label:otherLabel }});
+
+// DB: 感情選択を保存（otherとして）
+if (s.payload?.db_session_id){
+  await safeUpdate('empathy_sessions',
+    { step: 4, payload: { ...(s.payload||{}), emotion_key: ek, other_label: otherLabel } },
+    { id: s.payload.db_session_id }
+);
+}
+await logEvent('emotion_chosen', { label: 'other', custom: otherLabel });
+
+await client.replyMessage(event.replyToken, {
+  type:'text',
+  text:'その気持ちはどれくらい強かった？（1〜10）',
+  quickReply:{ items: numberButtons() }
+});
     return;
   }
 
@@ -179,37 +218,62 @@ async function onPostback(event){
 
   if (cmd==='emo'){
     const ek = arg;
-    sessions.set(gid, { step:4, payload:{ ...s.payload, emotion_key:ek }});
-    await client.replyMessage(replyToken, {
-      type:'text',
-      text:'その気持ちはどれくらい強かった？（1〜10）',
-      quickReply:{ items: numberButtons() }
-    });
+sessions.set(gid, { step:4, payload:{ ...s.payload, emotion_key:ek }});
+
+if (s.payload?.db_session_id){
+  await safeUpdate('empathy_sessions',
+    { step: 4, payload: { ...(s.payload||{}), emotion_key: ek } },
+    { id: s.payload.db_session_id }
+  );
+}
+await logEvent('emotion_chosen', { label: ek });
+
+await client.replyMessage(replyToken, {
+  type:'text',
+  text:'その気持ちはどれくらい強かった？（1〜10）',
+  quickReply:{ items: numberButtons() }
+});
     return;
   }
 
   if (cmd==='int'){
-    const n = Number(arg);
-    const ek = s.payload?.emotion_key || 'hazy';
-    const utter = s.payload?.utter || '';
-    const bucket = intensityBucket(n);
+  const n = Number(arg);
+  await logEvent('intensity_chosen', { value: n });
 
-    // 1/3/5/7/10の時だけガイドを直前に出す
-    const label = ek==='other' ? (s.payload?.other_label || 'その気持ち') : (EMOTIONS.find(e=>e.k===ek)?.l || 'その気持ち');
-    const gtext = GUIDE[ek]?.[bucket];
-    if (gtext){
-      await client.pushMessage(gid, { type:'text', text:`“${label}${bucket}”は、${gtext}くらいの感じだよ` });
-    }
+  const ek = s.payload?.emotion_key || 'hazy';
+  const utter = s.payload?.utter || '';
+  const bucket = intensityBucket(n);
 
-    // まとめ（45字以内）: 出来事要点 + 感情口語一節（数字は出さない）
-    const poi = brief(utter, 25);
-    const phrase = gtext ? gtext : '';
-    const summary = `${poi}のとき、${phrase}んだね`.slice(0,45);
-
-    sessions.set(gid, { step:6, payload:{ utter, emotion_key:ek, intensity:n, summary }});
-    await client.replyMessage(replyToken, { type:'text', text: summary });
-    return;
+  const label = ek==='other' ? (s.payload?.other_label || 'その気持ち') : (EMOTIONS.find(e=>e.k===ek)?.l || 'その気持ち');
+  const gtext = GUIDE[ek]?.[bucket];
+  if (gtext){
+    await client.pushMessage(gid, { type:'text', text:`“${label}${bucket}”は、${gtext}くらいの感じだよ` });
   }
+
+  const poi = brief(utter, 25);
+  const phrase = gtext || '';
+  const summary = `${poi}のとき、${phrase}んだね`.slice(0,45);
+
+  sessions.set(gid, { step:6, payload:{ utter, emotion_key:ek, intensity:n, summary, db_session_id: s.payload?.db_session_id }});
+
+  if (s.payload?.db_session_id){
+    await safeUpdate('empathy_sessions',
+      { step: 6, payload: { ...(s.payload||{}), intensity: n, summary } },
+      { id: s.payload.db_session_id }
+    );
+  }
+  await safeInsert('empathy_runs', {
+    group_id: gid,
+    user_id: event.source.userId,
+    utter,
+    emotion_key: ek,
+    intensity: n,
+    summary_shared: summary
+  });
+  await logEvent('summary_shown', { length: summary.length });
+
+  await client.replyMessage(replyToken, { type:'text', text: summary });
+  return;
 }
 
 // --- 起動 ---
