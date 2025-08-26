@@ -178,4 +178,108 @@ async function onText(event) {
   // S1
   if (s.step === 0 || s.step === 6) {
     if (!text) {
-      await client.replyMessage(event.replyToken, { type:'t
+      await client.replyMessage(event.replyToken, { type:'text', text:'短くで大丈夫だよ。今日は何があった？' });
+      sessions.set(gid, { step: 0, payload: {} });
+      return;
+    }
+
+    await logEvent('message_received', { length: text.length, at: Date.now() });
+    const empathy = await generateEmpathy(text);
+
+    // DBセッション保存
+    let dbSessionId = null;
+    try {
+      const { data } = await supabase
+        .from('empathy_sessions')
+        .insert({ group_id: gid, user_id: event.source.userId, step: 2, payload: { utter: text } })
+        .select('id').single();
+      dbSessionId = data?.id;
+    } catch(e){ console.error('[DB] create session fail:', e?.message || e); }
+
+    sessions.set(gid, { step: 2, payload: { utter: text, db_session_id: dbSessionId } });
+
+    await client.replyMessage(event.replyToken, { type:'text', text: empathy });
+    await client.pushMessage(gid, { type:'text', text:'近い気持ちを1つ選んでね（当てはまらなければ「どれでもない」→自由入力OK）' });
+    await client.pushMessage(gid, buildEmotionCarousel(EMOTIONS.map(e=>e.k)));
+    return;
+  }
+
+  // 自由入力
+  if (s.step === 3 && s.payload?.emotion_key === 'other') {
+    const ek = 'other';
+    const otherLabel = text.slice(0, 10);
+    const nextPayload = { ...s.payload, emotion_key: ek, other_label: otherLabel };
+    sessions.set(gid, { step: 4, payload: nextPayload });
+
+    if (s.payload?.db_session_id) {
+      await safeUpdate('empathy_sessions',{ step: 4, payload: nextPayload },{ id: s.payload.db_session_id });
+    }
+    await logEvent('emotion_chosen', { label:'other', custom: otherLabel });
+
+    const guide = GUIDE[ek] ? `\n例）1:${GUIDE[ek][1]} / 5:${GUIDE[ek][5]} / 10:${GUIDE[ek][10]}` : '';
+    await client.replyMessage(event.replyToken, { type:'text', text:`${otherLabel} の強さはどれくらい？${guide}` });
+    await client.pushMessage(gid, buildIntensityButtons(ek));
+    await client.pushMessage(gid, buildIntensityButton10(ek));
+    return;
+  }
+
+  await client.replyMessage(event.replyToken, { type:'text', text:'当てはまらないときは、近い気持ちの名前を自由入力してね' });
+}
+
+// ---- Postback ----
+async function onPostback(event) {
+  const gid = gidOf(event);
+  const data = event.postback?.data || '';
+  const s = sessions.get(gid) || { step: 0, payload: {} };
+  const replyToken = event.replyToken;
+  if (!data.startsWith('ef:')) return;
+  const [, cmd, arg] = data.split(':');
+
+  if (cmd === 'other') {
+    sessions.set(gid, { step: 3, payload: { ...s.payload, emotion_key:'other' } });
+    await client.replyMessage(replyToken, { type:'text', text:'当てはまらないときは気持ちを自由入力してね' });
+    return;
+  }
+
+  if (cmd === 'emo') {
+    const ek = arg;
+    const nextPayload = { ...s.payload, emotion_key: ek };
+    sessions.set(gid, { step: 4, payload: nextPayload });
+    if (s.payload?.db_session_id) {
+      await safeUpdate('empathy_sessions',{ step: 4, payload: nextPayload },{ id: s.payload.db_session_id });
+    }
+    await logEvent('emotion_chosen', { label: ek });
+
+    const label = EMOTIONS.find(e=>e.k===ek)?.l || 'その気持ち';
+    const guide = GUIDE[ek] ? `\n例）1:${GUIDE[ek][1]} / 5:${GUIDE[ek][5]} / 10:${GUIDE[ek][10]}` : '';
+    await client.replyMessage(replyToken, { type:'text', text:`${label} の強さはどれくらい？${guide}` });
+    await client.pushMessage(gid, buildIntensityButtons(ek));
+    await client.pushMessage(gid, buildIntensityButton10(ek));
+    return;
+  }
+
+  if (cmd === 'int') {
+    const n = Number(arg);
+    await logEvent('intensity_chosen', { value:n });
+    const ek = s.payload?.emotion_key || 'hazy';
+    const utter = s.payload?.utter || '';
+    const bucket = intensityBucket(n);
+    const label = ek === 'other' ? (s.payload?.other_label || 'その気持ち') : (EMOTIONS.find(e=>e.k===ek)?.l || 'その気持ち');
+
+    const summary = await generateSummary({ utter, label, bucket });
+
+    const nextPayload = { utter, emotion_key: ek, intensity: n, summary, db_session_id: s.payload?.db_session_id };
+    sessions.set(gid, { step: 6, payload: nextPayload });
+    if (s.payload?.db_session_id) {
+      await safeUpdate('empathy_sessions',{ step: 6, payload: nextPayload },{ id: s.payload.db_session_id });
+    }
+    await safeInsert('empathy_runs',{ group_id:gid, user_id:event.source.userId, utter, emotion_key:ek, intensity:n, summary_shared:summary });
+    await logEvent('summary_shown', { length: summary.length });
+    await client.replyMessage(replyToken, { type:'text', text: summary });
+    return;
+  }
+}
+
+// ---- 起動 ----
+const PORT = process.env.PORT || 3000;
+app.listen(PORT,'0.0.0.0',()=>console.log(`Kemii MVP listening on ${PORT}`));
