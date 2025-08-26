@@ -80,14 +80,16 @@ const GUIDE = {
 function gidOf(event) {
   return event.source.type === 'group' ? event.source.groupId : event.source.userId;
 }
+// 強さのバケット（1〜5に統一）
 function intensityBucket(n) {
-  if ([1,3,5,7,10].includes(n)) return n;
-  if (n <= 2) return 1;
-  if (n <= 4) return 3;
-  if (n <= 6) return 5;
-  if (n <= 8) return 7;
-  return 10;
+  const v = Number(n) || 3;
+  if (v <= 1) return 1;
+  if (v === 2) return 2;
+  if (v === 3) return 3;
+  if (v === 4) return 4;
+  return 5;
 }
+
 function buildEmotionCarousel(codes){
   const columns = codes.slice(0,4).map(k => {
     const m = EMOTIONS.find(x=>x.k===k);
@@ -108,17 +110,22 @@ function buildEmotionCarousel(codes){
   });
   return { type:'template', altText:'感情を選んでね', template:{ type:'carousel', columns } };
 }
+// 強さボタン（1〜5）
 function buildIntensityButtons(code){
   const make = n => ({ type:'postback', label:String(n), data:`ef:int:${n}`, displayText:`${n}` });
   return {
     type:'template',
     altText:'強さを選んでね',
-    template:{ type:'buttons', title:'強さ（1/3/5/7/10）', text: GUIDE[code] ? '1=弱い / 5=けっこう / 10=とても' : '1/3/5/7/10から選んでね', actions:[make(1),make(3),make(5),make(7)] }
+    template:{
+      type:'buttons',
+      title:'強さ（1〜5）',
+      text: '1=ごく弱い / 3=ほどほど / 5=とても強い',
+      actions:[make(1), make(2), make(3), make(4)]
+    }
   };
 }
-function buildIntensityButton10(code){
-  return { type:'template', altText:'さらに強い？', template:{ type:'buttons', title:'最高レベル？', text:'最高なら「10」を選んでね', actions:[{ type:'postback', label:'10', data:`ef:int:10`, displayText:'10' }] } };
-}
+// ※ buildIntensityButton10 は不要なので関数ごと削除
+
 
 // ---- OpenAI生成系 ----
 async function generateEmpathy(message){
@@ -135,25 +142,27 @@ async function generateEmpathy(message){
   return (r.choices?.[0]?.message?.content || 'そっか、そうだったんだね').trim();
 }
 
+// まとめ生成（新：1〜5用／“惜しい”改善）
 async function generateSummary({ utter, label, bucket }){
-  const scale = {1:'とても弱い',3:'やや弱い',5:'ほどほど',7:'かなり強い',10:'とても強い'}[bucket] || 'ほどほど';
-  const prompt = `次の出来事と感情を、1〜2文で自然な日本語にまとめてください。
-- 数字は言い換えて
-- 「〜だったみたい」を使ってOK
-- 最後に軽くねぎらいを一言
+  const scale = {1:'ごく弱い',2:'やや弱い',3:'ほどほど',4:'かなり強い',5:'とても強い'}[bucket] || 'ほどほど';
+  const prompt = `次の出来事と感情を、くどくならない日本語で1〜2文に要約してください。
+- 事実→感情の順に短く
+- 強さ（${scale}）は数字にせず言い換え
+- 断定しすぎず「〜みたい」「〜かも」を許容
+- 最後に一言ねぎらい（例:「話してくれてありがとう」）
 出来事: ${utter}
 感情: ${label}（強さ:${scale}）`;
   try{
     const r = await openai.chat.completions.create({
-      model:'gpt-4o-mini',
-      messages:[{role:'user',content:prompt}],
-      temperature:0.3
+      model:'gpt-4o-mini', temperature:0.25,
+      messages:[{role:'user',content:prompt}]
     });
-    return (r.choices?.[0]?.message?.content || `${label}だったみたい。ありがとうね`).trim();
+    return (r.choices?.[0]?.message?.content || `${label}だったみたい。話してくれてありがとう。`).trim();
   }catch{
-    return `${label}だったみたい。ありがとうね`;
+    return `${label}だったみたい。話してくれてありがとう。`;
   }
 }
+
 
 // ---- Webhook ----
 app.post(
@@ -193,7 +202,13 @@ async function onText(event) {
     }
 
     await logEvent('message_received', { length: text.length, at: Date.now() });
-    const empathy = await generateEmpathy(text);
+    // onText S1（即時ACK→後追いpushでタイムアウト回避）
+await client.replyMessage(event.replyToken, { type:'text', text:'読んだよ。少し考えるね…' });
+// …DB保存は従来通り…
+const empathy = await generateEmpathy(text).catch(()=> 'そっか、そうだったんだね');
+await client.pushMessage(gid, { type:'text', text: empathy });
+await client.pushMessage(gid, { type:'text', text:'近い気持ちを1つ選んでね（当てはまらなければ「どれでもない」→自由入力OK）' });
+await client.pushMessage(gid, buildEmotionCarousel(EMOTIONS.map(e=>e.k)));
 
     // DBセッション保存
     let dbSessionId = null;
@@ -207,9 +222,7 @@ async function onText(event) {
 
     sessions.set(gid, { step: 2, payload: { utter: text, db_session_id: dbSessionId } });
 
-    await client.replyMessage(event.replyToken, { type:'text', text: empathy });
-    await client.pushMessage(gid, { type:'text', text:'近い気持ちを1つ選んでね（当てはまらなければ「どれでもない」→自由入力OK）' });
-    await client.pushMessage(gid, buildEmotionCarousel(EMOTIONS.map(e=>e.k)));
+    
     return;
   }
 
@@ -279,13 +292,14 @@ async function onPostback(event) {
 
     const label = EMOTIONS.find(e=>e.k===ek)?.l || 'その気持ち';
     // ef:emo後のガイド（NVCの言い換えを使用／1〜5）
+// ef:emo 後の案内（1〜5に統一）
 const guide = GUIDE[ek]
   ? `\n例）1:${GUIDE[ek][1]} / 3:${GUIDE[ek][3]} / 5:${GUIDE[ek][5]}`
   : `\n例）1=ごく弱い / 3=ほどほど / 5=とても強い`;
 
-    await client.replyMessage(replyToken, { type:'text', text:`${label} の強さはどれくらい？${guide}` });
-    await client.pushMessage(gid, buildIntensityButtons(ek));
-    await client.pushMessage(gid, buildIntensityButton10(ek));
+await client.replyMessage(replyToken, { type:'text', text:`${label} の強さはどれくらい？${guide}` });
+await client.pushMessage(gid, buildIntensityButtons(ek));
+
     return;
   }
 
