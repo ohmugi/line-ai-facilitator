@@ -110,45 +110,142 @@ function buildEmotionCarousel(codes){
   });
   return { type:'template', altText:'感情を選んでね', template:{ type:'carousel', columns } };
 }
-// 強さボタン（1〜5）
-function buildIntensityButtons(code){
-  const make = n => ({ type:'postback', label:String(n), data:`ef:int:${n}`, displayText:`${n}` });
+
+  // 感情別ガイド（NVC 10カテゴリ×1..5）
+const GUIDE = {
+  anger: { // 怒り
+    1:'小さくいらだつ（表情に出ない）',
+    2:'やや不快（短くチクリとする）',
+    3:'はっきり怒る（言葉がきつくなる）',
+    4:'かなり腹立つ（声量・口調が強くなる）',
+    5:'強い怒り（今は対話が難しい）',
+  },
+  sadness: { // 悲しみ
+    1:'少ししょんぼり（ため息が出る）',
+    2:'やや落ち込む（気持ちが下向き）',
+    3:'胸が重い（集中しづらい）',
+    4:'かなりつらい（涙が出そう）',
+    5:'深く悲しい（何も手につかない）',
+  },
+  anxiety: { // 不安
+    1:'少しそわそわ（注意が散る）',
+    2:'やや不安（同じことを考え直す）',
+    3:'落ち着かない（身体に緊張を感じる）',
+    4:'かなり不安（最悪の想像が浮かぶ）',
+    5:'強い恐れ（眠れない/手がつかない）',
+  },
+  helpless: { // 無力感
+    1:'少し疲れ（気力はある）',
+    2:'やや無力（腰が重い）',
+    3:'手につかない（先延ばしが増える）',
+    4:'かなり消耗（簡単なことも負担）',
+    5:'打ちのめされる（動けない）',
+  },
+  shame: { // 恥/罪悪感
+    1:'少し気まずい（顔を伏せたくなる）',
+    2:'やや後悔（やり直したい気持ち）',
+    3:'自己否定が出る（自分を責める）',
+    4:'かなり恥ずかしい（人目を避けたい）',
+    5:'強い罪悪感（居ても立ってもいられない）',
+  },
+  joy: { // 喜び
+    1:'小さくうれしい（口元が緩む）',
+    2:'けっこううれしい（誰かに言いたい）',
+    3:'うれしい（気分が上向く）',
+    4:'とてもうれしい（体が軽い）',
+    5:'最高にうれしい（飛び上がりたい）',
+  },
+  calm: { // 安心
+    1:'少し落ち着く（肩の力が抜ける）',
+    2:'やや安心（呼吸が整う）',
+    3:'安心できる（視野が広がる）',
+    4:'だいぶ穏やか（余裕が戻る）',
+    5:'深く安らぐ（安心感で満たされる）',
+  },
+  vitality: { // 活力
+    1:'少し元気（手をつけられる）',
+    2:'やや意欲（動き出せる）',
+    3:'やる気が出る（ペースが上がる）',
+    4:'かなり活発（工夫が湧く）',
+    5:'満ちあふれる（次々やりたい）',
+  },
+  affection: { // 愛情/つながり
+    1:'少しあたたかい（ほっとする）',
+    2:'やや親しみ（距離が近く感じる）',
+    3:'つながりを感じる（心が柔らぐ）',
+    4:'強く感謝（胸が熱くなる）',
+    5:'深い愛情（涙が出るほどうれしい）',
+  },
+  pride: { // 誇り/満足
+    1:'少し満足（うまくいった）',
+    2:'やや誇らしい（自分を認められる）',
+    3:'誇りを感じる（努力が報われた）',
+    4:'かなり誇らしい（人に伝えたい）',
+    5:'大きな達成感（自分を誇れる）',
+  },
+};
+
+
+ // 強さカルーセル（感情別説明を使用）
+function buildIntensityCarousel(code){
+  const g = GUIDE[code] || {1:'ごく弱い',2:'やや弱い',3:'ほどほど',4:'かなり強い',5:'とても強い'};
+  const columns = [1,2,3,4,5].map(n => ({
+    thumbnailImageUrl: `https://dummyimage.com/600x400/ffffff/000.png&text=${n}`,
+    title: `強さ ${n}`,
+    text: g[n], // ← 感情別
+    actions: [{ type:'postback', label:String(n), data:`ef:int:${n}`, displayText:String(n) }]
+  }));
+  return { type:'template', altText:'強さを選んでね', template:{ type:'carousel', columns } };
+}
+
+
   return {
     type:'template',
     altText:'強さを選んでね',
-    template:{
-      type:'buttons',
-      title:'強さ（1〜5）',
-      text: '1=ごく弱い / 3=ほどほど / 5=とても強い',
-      actions:[make(1), make(2), make(3), make(4)]
-    }
+    template:{ type:'carousel', columns }
   };
-}
-// ※ buildIntensityButton10 は不要なので関数ごと削除
+
+
 
 
 // ---- OpenAI生成系 ----
-async function generateEmpathy(message){
-  const prompt = `次の発話に対して、1〜2文の自然な共感を返してください。
-- ポジなら「おめでとう！」など
-- ネガなら「大変だったね」など
-- 曖昧なら「そっか〜」など
+// 新：2–3文に増量（gpt-4o-mini）
+async function generateEmpathyLong(message){
+  const prompt = `次の発話に、自然で温かい共感を2〜3文で返してください。
+- ポジなら喜びを一緒に味わう
+- ネガなら労いと受容
+- 中立なら丁寧に受け止める
+- 過度に大げさにしない／絵文字なし
 発話: ${message}`;
   const r = await openai.chat.completions.create({
-    model:'gpt-4o-mini',
-    messages:[{role:'user',content:prompt}],
-    temperature:0.3
+    model:'gpt-4o-mini', temperature:0.25,
+    messages:[{role:'user',content:prompt}]
   });
-  return (r.choices?.[0]?.message?.content || 'そっか、そうだったんだね').trim();
+  return (r.choices?.[0]?.message?.content || 'そっか、そうだったんだね。話してくれてうれしいよ。').trim();
 }
+// 800msで間に合わない時はローカル共感にフォールバック（ACKを遅らせない）
+function localEmpathy(msg=''){
+  const pos = /(楽し|嬉|良さ|ワクワク|合格|できた|助か|ありがとう)/.test(msg);
+  const neg = /(疲れ|大変|困|不安|悲|落ち込|つら|怒|失敗)/.test(msg);
+  if (pos) return 'それ、いい時間になりそうだね。うれしさが伝わってきたよ。どんなところが楽しみ？';
+  if (neg) return 'それは本当に大変だったね。ここまで頑張ってきたこと、ちゃんと伝わってるよ。';
+  return 'なるほど、そういうことがあったんだね。気持ちをことばにしてくれて、ありがとう。';
+}
+async function generateEmpathySmart(message){
+  return await Promise.race([
+    generateEmpathyLong(message),
+    new Promise(res=>setTimeout(()=>res(localEmpathy(message)), 800))
+  ]);
+}
+
 
 // まとめ生成（新：1〜5用／“惜しい”改善）
 async function generateSummary({ utter, label, bucket }){
   const scale = {1:'ごく弱い',2:'やや弱い',3:'ほどほど',4:'かなり強い',5:'とても強い'}[bucket] || 'ほどほど';
-  const prompt = `次の出来事と感情を、くどくならない日本語で1〜2文に要約してください。
-- 事実→感情の順に短く
-- 強さ（${scale}）は数字にせず言い換え
-- 断定しすぎず「〜みたい」「〜かも」を許容
+  const prompt = `次の出来事と感情を、自然で読みやすい日本語で1〜2文にまとめてください。
+- 事実→感情の順で簡潔に
+- 強さは「ごく弱い/ほどほど/とても強い」などに言い換え
+- 過度に断定せず「〜みたい」「〜だったかも」を許容
 - 最後に一言ねぎらい（例:「話してくれてありがとう」）
 出来事: ${utter}
 感情: ${label}（強さ:${scale}）`;
@@ -203,12 +300,45 @@ async function onText(event) {
 
     await logEvent('message_received', { length: text.length, at: Date.now() });
     // onText S1（即時ACK→後追いpushでタイムアウト回避）
-await client.replyMessage(event.replyToken, { type:'text', text:'読んだよ。少し考えるね…' });
-// …DB保存は従来通り…
-const empathy = await generateEmpathy(text).catch(()=> 'そっか、そうだったんだね');
-await client.pushMessage(gid, { type:'text', text: empathy });
+// onText S1（最初から共感を返す｜長文・フォールバック付）
+const empathy = await generateEmpathySmart(text);
+await client.replyMessage(event.replyToken, { type:'text', text: empathy });
 await client.pushMessage(gid, { type:'text', text:'近い気持ちを1つ選んでね（当てはまらなければ「どれでもない」→自由入力OK）' });
-await client.pushMessage(gid, buildEmotionCarousel(EMOTIONS.map(e=>e.k)));
+// 新：toneを推定→NVCのポジ/ネガから上位3をAPI選定
+const cand = await suggestEmotionCodes(text);
+await client.pushMessage(gid, buildEmotionCarousel(cand));
+// 新規：文脈抽出（トーン判定＋キー3つをJSONで返させる）
+async function suggestEmotionCodes(utter){
+  const POS = ['joy','calm','vitality','affection','pride'];
+  const NEG = ['anger','sadness','anxiety','helpless','shame'];
+  const ALL = [...POS, ...NEG];
+  const prompt = `文章のトーンを positive/negative/neutral のいずれかで判定し、
+そのトーンに合う次の感情キーから上位3件を返してください（JSONのみ）:
+keys: ${ALL.join(',')}
+出力例: {"tone":"positive","codes":["joy","calm","affection"]}
+文章: ${utter}`;
+  try{
+    const r = await openai.chat.completions.create({
+      model:'gpt-4o-mini', temperature:0.2,
+      messages:[{role:'user',content:prompt}]
+    });
+    const txt = r.choices?.[0]?.message?.content||'{}';
+    const j = JSON.parse(txt);
+    let pool = ALL;
+    if (j.tone==='positive') pool = POS;
+    if (j.tone==='negative') pool = NEG;
+    const picked = (j.codes||[]).filter(k=>pool.includes(k));
+    // フォールバック：ポジ出来事ならポジ側
+    if (!picked.length){
+      const guessPos = /(楽し|嬉|良さ|ワクワク|合格|助か|安堵)/.test(utter);
+      return (guessPos?POS:NEG).slice(0,3);
+    }
+    return picked.slice(0,3);
+  }catch{
+    return ['joy','calm','affection'];
+  }
+}
+
 
     // DBセッション保存
     let dbSessionId = null;
@@ -239,8 +369,10 @@ await client.pushMessage(gid, buildEmotionCarousel(EMOTIONS.map(e=>e.k)));
     await logEvent('emotion_chosen', { label:'other', custom: otherLabel });
 
     const guide = GUIDE[ek] ? `\n例）1:${GUIDE[ek][1]} / 5:${GUIDE[ek][5]} / 10:${GUIDE[ek][10]}` : '';
-    await client.replyMessage(event.replyToken, { type:'text', text:`${otherLabel} の強さはどれくらい？${guide}` });
-    await client.pushMessage(gid, buildIntensityButtons(ek));
+    // ef:emo後（カルーセルで提示）
+await client.replyMessage(replyToken, { type:'text', text:`${label} の強さはどれくらい？` });
+await client.pushMessage(gid, buildIntensityCarousel(ek));
+
     await client.pushMessage(gid, buildIntensityButton10(ek));
     return;
   }
