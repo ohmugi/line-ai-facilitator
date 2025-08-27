@@ -47,18 +47,16 @@ const sessions = new Map();
 
 // ---- 定数（感情セット＆ガイド）----
 const EMOTIONS = [
-  // 心地よくない感情
-  { k:'anger',    e:'😠', l:'怒り' },        // いらだち・憤り・フラストレーション 等
-  { k:'sadness',  e:'😢', l:'悲しみ' },      // 喪失感・落胆・孤独 等
-  { k:'anxiety',  e:'😟', l:'不安' },        // 緊張・心配・恐れ 等
-  { k:'helpless', e:'🥀', l:'無力感' },      // 疲労・混乱・絶望感 等
-  { k:'shame',    e:'😞', l:'恥/罪悪感' },   // 後悔・居心地の悪さ 等
-  // 心地よい感情
-  { k:'joy',      e:'😊', l:'喜び' },        // 嬉しさ・幸せ・達成感 等
-  { k:'calm',     e:'😌', l:'安心' },        // 落ち着き・穏やかさ 等
-  { k:'vitality', e:'💪', l:'活力' },        // 元気・意欲・熱中 等
-  { k:'affection',e:'🤝', l:'愛情' },        // 感謝・親しみ・つながり 等
-  { k:'pride',    e:'🏅', l:'誇り' },        // 満足・自信・達成感 等
+  { k:'joy',      e:'😊', l:'喜び',     desc:'うれしさ・幸せ・達成感など' },
+  { k:'calm',     e:'😌', l:'安心',     desc:'落ち着き・安らぎ・余裕が戻る感じ' },
+  { k:'vitality', e:'💪', l:'活力',     desc:'元気・やる気・前に進める感じ' },
+  { k:'affection',e:'🤝', l:'愛情',     desc:'親しみ・感謝・つながりを感じる' },
+  { k:'pride',    e:'🏅', l:'誇り',     desc:'満足・自信・やり切れた感覚' },
+  { k:'anger',    e:'😠', l:'怒り',     desc:'いらだち・フラストレーション' },
+  { k:'sadness',  e:'😢', l:'悲しみ',   desc:'落胆・喪失感・孤独' },
+  { k:'anxiety',  e:'😟', l:'不安',     desc:'そわそわ・心配・恐れ' },
+  { k:'helpless', e:'🥀', l:'無力感',   desc:'疲労・混乱・手につかない' },
+  { k:'shame',    e:'😞', l:'恥/罪悪感',desc:'後悔・自己否定・居心地の悪さ' },
 ];
 
 
@@ -84,17 +82,16 @@ function buildEmotionCarousel(codes){
     return {
       thumbnailImageUrl: 'https://dummyimage.com/600x400/ffffff/000.png&text=kemii',
       title: m.l,
-      text: '当てはまらなければ「どれでもない」で自由入力OKだよ',
-      actions: [
-        { type:'postback', label:'これにする', data:`ef:emo:${k}`, displayText:`${m.l}` }
-      ]
+      text: m.desc, // ←感情に合った説明
+      actions:[{ type:'postback', label:'これにする', data:`ef:emo:${k}`, displayText:m.l }]
     };
   });
+  // “どれでもない”列だけは補助説明を表示
   columns.push({
-    thumbnailImageUrl: 'https://dummyimage.com/600x400/ffffff/000.png&text=?',
-    title: 'どれでもない',
-    text: '自由に入力してOKだよ（短くで大丈夫）',
-    actions: [{ type:'postback', label:'自由入力する', data:'ef:other', displayText:'どれでもない' }]
+    thumbnailImageUrl:'https://dummyimage.com/600x400/ffffff/000.png&text=?',
+    title:'どれでもない',
+    text:'当てはまらないときは自由入力で近い気持ちを書いてね',
+    actions:[{ type:'postback', label:'自由入力する', data:'ef:other', displayText:'どれでもない' }]
   });
   return { type:'template', altText:'感情を選んでね', template:{ type:'carousel', columns } };
 }
@@ -194,12 +191,13 @@ function buildIntensityCarousel(code){
 // ---- OpenAI生成系 ----
 // 新：2–3文に増量（gpt-4o-mini）
 async function generateEmpathyLong(message){
-  const prompt = `次の発話に、自然で温かい共感を2〜3文で返してください。
-- ポジなら喜びを一緒に味わう
-- ネガなら労いと受容
-- 中立なら丁寧に受け止める
-- 過度に大げさにしない／絵文字なし
-発話: ${message}`;
+  const prompt = `次の発話に対して、内容に沿った共感を2〜3文で返してください。
+- まず出来事をワンフレーズで言い換える
+- つぎに話し手の意味づけ/期待（良さ・難しさ）を短く推測する
+- その上で、同じ方向の気持ちに寄り添う
+- ポジは一緒に喜ぶ、ネガは労いと安心、曖昧は丁寧に受け止める
+- 大げさ/説教/助言はしない。絵文字なし
+発話: """${message}"""`;
   const r = await openai.chat.completions.create({
     model:'gpt-4o-mini', temperature:0.25,
     messages:[{role:'user',content:prompt}]
