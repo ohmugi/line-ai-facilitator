@@ -4,8 +4,7 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import { middleware, Client } from '@line/bot-sdk';
 import OpenAI from 'openai';
-import supabase from './src/lib/supabaseClient.js';
-
+import supabase from './lib/supabaseClient.js';
 const app = express();
 
 // ---- LINE設定 ----
