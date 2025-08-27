@@ -187,12 +187,7 @@ function buildIntensityCarousel(code){
 }
 
 
-  return {
-    type:'template',
-    altText:'強さを選んでね',
-    template:{ type:'carousel', columns }
-  };
-
+ 
 
 
 
