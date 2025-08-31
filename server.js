@@ -192,4 +192,27 @@ async function onPostback(event){
 
 // ---- 起動 ----
 const PORT = process.env.PORT || 3000;
+
+// ---- Health Check & Root ----
+app.get('/healthz', (req, res) => {
+  // 外部サービスへアクセスしない（ここでOpenAI/Supabaseに触らないのが鉄則）
+  res.status(200).json({
+    status: 'ok',
+    service: 'kemii',
+    // 簡易診断（値はマスク）
+    env: {
+      channelAccessToken: !!process.env.CHANNEL_ACCESS_TOKEN,
+      channelSecret: !!process.env.CHANNEL_SECRET,
+      openaiKey: !!process.env.OPENAI_API_KEY,
+      supabaseUrl: !!process.env.SUPABASE_URL,
+      supabaseKey: !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY),
+    },
+    time: new Date().toISOString(),
+  });
+});
+
+app.get('/', (_req, res) => {
+  res.status(200).send('Kemii is running');
+});
+
 app.listen(PORT, ()=>console.log(`Kemii server running on ${PORT}`));
