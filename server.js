@@ -137,12 +137,26 @@ function buildIntensityCarousel(code){
   return { type:'template', altText:'強さを選んでね', template:{ type:'carousel', columns } };
 }
 
-// ---- Webhook ----
-app.post('/webhook', bodyParser.json(), middleware(config), async (req,res)=>{
+// WebhookはLINE署名検証を最優先。body-parserは使わない
+app.post('/webhook', middleware(config), (req, res) => {
   const events = req.body.events || [];
-  await Promise.all(events.map(handleEvent));
+
+  // 先に即200を返す（LINEの再送を防ぐ）
   res.status(200).end();
+
+  // 応答は別タスクで処理（長い生成でもOK）
+  // 失敗してもWebhook応答には影響しない
+  setImmediate(async () => {
+    try {
+      for (const ev of events) {
+        await handleEvent(ev);
+      }
+    } catch (e) {
+      console.error('Webhook async error:', e);
+    }
+  });
 });
+
 
 async function handleEvent(event){
   if (event.type==='message' && event.message.type==='text'){
