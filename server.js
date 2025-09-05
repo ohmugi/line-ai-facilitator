@@ -50,6 +50,65 @@ function orderedEightBySentiment(sentiment) {
   return [...POS_KEYS, ...NEG_KEYS];
 }
 
+// ===== 自然文合成ユーティリティ（主語のねじれを防ぐ版） =====
+
+// 強さ(1-5)→ 副詞
+function intensityAdverb(n){
+  return { 1:'ちょっと', 2:'けっこう', 3:'かなり', 4:'すごく', 5:'最高に' }[n] || '';
+}
+
+// emotion_key → 述語（過去形）
+function emotionPredicate(ek){
+  const map = {
+    joy:'うれしかった',
+    calm:'ほっとした',
+    affection:'あたたかい気持ちになった',
+    pride:'誇らしく感じた',
+    anxiety:'不安に感じた',
+    anger:'イラッとした',
+    sadness:'さみしく感じた',
+    helpless:'どうにもならない気持ちになった',
+    grat:'ありがたい気持ちになった',
+    hope:'楽しみな気持ちになった',
+    relief:'ほっとした'
+  };
+  return map[ek] || '気持ちになった';
+}
+
+// 出来事テキストを軽く整形（句点削除など）
+function tidyEventText(raw=''){
+  const t = String(raw).trim().replace(/\s+/g,' ');
+  return t.replace(/[。.!?]+$/,'');
+}
+
+// 出来事の「て形／で」への簡易変換
+// 例: 「おいしかった」→「おいしくて」, 「〜でした」→「〜で」
+function toTeJoin(text=''){
+  let s = tidyEventText(text);
+
+  // i形容詞「〜かった」→「〜くて」
+  s = s.replace(/([ぁ-んァ-ーン一-龠A-Za-z0-9]+?)かった$/,'$1くて');
+
+  // よくある言い回しの個別ケア（よかった→よくて 等）
+  s = s.replace(/よかった$/,'よくて');
+
+  // 名詞述語「〜でした/だった」→「〜で」
+  s = s.replace(/でした?$/,'で').replace(/だった$/,'で');
+
+  // 末尾が既に「で/て」ならそのまま、そうでなければ「で」を追加
+  if (!/(で|て)$/.test(s)) s = s + 'で';
+  return s;
+}
+
+// 最終文を合成（例：「昼ご飯がおいしくてけっこううれしかったのね。話してくれてありがとうにゃ」）
+function renderFeelingSentence(eventText, ek, intensity){
+  const lead = toTeJoin(eventText);       // 〜で／〜て
+  const adv  = intensityAdverb(intensity);
+  const pred = emotionPredicate(ek);      // 〜うれしかった など（過去形）
+  const advStr = adv ? adv : '';
+  return `${lead}${advStr}${pred}のね。話してくれてありがとうにゃ`;
+}
+
 
 // ---- 感情カテゴリ（NVC準拠、desc付き） ----
 const EMOTIONS = [
@@ -240,9 +299,20 @@ if (cmd==='other'){
 if (cmd==='int'){
   const n = Number(arg);
   const ek = s.payload.emotion_key;
-  const label = ek==='other' ? 'その気持ち' : (EMOTIONS.find(e=>e.k===ek)?.l||'その気持ち');
-  await client.replyMessage(event.replyToken, { type:'text', text:`${label}は${GUIDE[ek]?.[n]||n}くらいなんだね。話してくれてありがとうにゃ。` });
+  const utter = s.payload.utter || ''; // onText で保存した出来事テキスト
+
+  // 出来事＋感情＋強さ → 自然文
+  const sentence = renderFeelingSentence(utter, ek, n);
+
+  await client.replyMessage(event.replyToken, {
+    type:'text',
+    text: sentence
+  });
+
+  // （任意）ここで feelings 更新を行う場合は追記：
+  // await supabase.from('feelings').update({ emotion: ek, intensity: n }).eq('id', feelingId);
 }
+
 
 }
 
