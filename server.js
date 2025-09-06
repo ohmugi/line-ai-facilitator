@@ -230,24 +230,17 @@ function buildIntensityCarousel(code){
 }
 
 // WebhookはLINE署名検証を最優先。body-parserは使わない
-app.post('/webhook', middleware(config), (req, res) => {
-  const events = req.body.events || [];
+app.post("/webhook", (req, res) => {
+  const events = req.body.events;
+  console.log("[WEBHOOK RECEIVED]", JSON.stringify(events, null, 2)); // ★これ追加
+  res.sendStatus(200);
 
-  // 先に即200を返す（LINEの再送を防ぐ）
-  res.status(200).end();
-
-  // 応答は別タスクで処理（長い生成でもOK）
-  // 失敗してもWebhook応答には影響しない
-  setImmediate(async () => {
-    try {
-      for (const ev of events) {
-        await handleEvent(ev);
-      }
-    } catch (e) {
-      console.error('Webhook async error:', e);
-    }
+  events.forEach(async (event) => {
+    console.log("[EVENT]", event.source, event.message?.text); // ★送信者とメッセージを出す
+    // ここからreply処理
   });
 });
+
 
 
 async function handleEvent(event){
