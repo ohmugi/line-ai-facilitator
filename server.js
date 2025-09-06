@@ -1,7 +1,6 @@
 // server.js
 
 import express from 'express';
-import bodyParser from 'body-parser';
 import { middleware, Client } from '@line/bot-sdk';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
@@ -229,17 +228,22 @@ function buildIntensityCarousel(code){
   return { type:'template', altText:'強さを選んでね', template:{ type:'carousel', columns } };
 }
 
-// WebhookはLINE署名検証を最優先。body-parserは使わない
-app.post("/webhook", (req, res) => {
-  const events = req.body.events;
-  console.log("[WEBHOOK RECEIVED]", JSON.stringify(events, null, 2)); // ★これ追加
-  res.sendStatus(200);
 
-  events.forEach(async (event) => {
-    console.log("[EVENT]", event.source, event.message?.text); // ★送信者とメッセージを出す
-    // ここからreply処理
-  });
+// 既存の config をそのまま使う（CHANNEL_ACCESS_TOKEN / CHANNEL_SECRET を参照）
+app.post("/webhook", middleware(config), async (req, res) => {
+  try {
+    const events = req.body?.events || [];
+    console.log("[WEBHOOK RECEIVED]", events.length);
+
+    await Promise.all(events.map(handleEvent)); // ← 下の handleEvent をそのまま利用
+    return res.sendStatus(200);
+  } catch (e) {
+    console.error("[WEBHOOK_ERR]", e?.response?.data || e);
+    // 再送ループを避けるため基本200で返す
+    return res.sendStatus(200);
+  }
 });
+
 
 
 
