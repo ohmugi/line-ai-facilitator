@@ -11,12 +11,21 @@ const supabase = createClient(
 );
 const app = express();
 
-// ---- LINE設定 ----
+// ---- LINE設定 ----（LINE_* / CHANNEL_* どちらの命名でも拾う）
 const config = {
-  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
-  channelSecret: process.env.CHANNEL_SECRET,
+  channelAccessToken:
+    process.env.CHANNEL_ACCESS_TOKEN || process.env.LINE_CHANNEL_ACCESS_TOKEN,
+  channelSecret:
+    process.env.CHANNEL_SECRET || process.env.LINE_CHANNEL_SECRET,
 };
+if (!config.channelSecret || !config.channelAccessToken) {
+  console.warn('[BOOT] LINE env missing:', {
+    hasToken: !!config.channelAccessToken,
+    hasSecret: !!config.channelSecret,
+  });
+}
 const client = new Client(config);
+
 
 // ---- OpenAI ----
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -229,20 +238,45 @@ function buildIntensityCarousel(code){
 }
 
 
-// 既存の config をそのまま使う（CHANNEL_ACCESS_TOKEN / CHANNEL_SECRET を参照）
+import crypto from "crypto";
+
+// --- /webhook 署名の可視化（SDK前段で生ボディに対して検証ログを出す）---
+app.use('/webhook', express.raw({ type: '*/*' }), (req, _res, next) => {
+  try {
+    const signature = req.header('x-line-signature') || '';
+    if (!config.channelSecret) {
+      console.error('[SIGN] missing secret');
+      return next();
+    }
+    const hmac = crypto.createHmac('sha256', config.channelSecret);
+    hmac.update(req.body);
+    const expected = hmac.digest('base64');
+    const ok = signature === expected;
+    if (!ok) {
+      console.error('[SIGN] invalid signature. Will be rejected by SDK middleware.');
+    } else {
+      console.log('[SIGN] ok');
+    }
+  } catch (e) {
+    console.error('[SIGN] error', e);
+  }
+  next();
+});
+
+// --- LINE SDK ミドルウェア適用（署名NGはここで401に）---
 app.post("/webhook", middleware(config), async (req, res) => {
   try {
     const events = req.body?.events || [];
     console.log("[WEBHOOK RECEIVED]", events.length);
 
-    await Promise.all(events.map(handleEvent)); // ← 下の handleEvent をそのまま利用
+    await Promise.all(events.map(handleEvent));
     return res.sendStatus(200);
   } catch (e) {
     console.error("[WEBHOOK_ERR]", e?.response?.data || e);
-    // 再送ループを避けるため基本200で返す
-    return res.sendStatus(200);
+    return res.sendStatus(200); // 再送ループ回避のため200
   }
 });
+
 
 
 
@@ -260,18 +294,21 @@ async function onText(event){
   const gid = event.source.groupId || event.source.userId;
   const text = event.message.text.trim();
 
-  const empathy = await generateEmpathySmart(text); // ← 既存のスマート共感（中では generateEmpathyLong を呼ぶ想定）
-  await client.replyMessage(event.replyToken, { type:'text', text: empathy });
+  const empathy = await generateEmpathySmart(text);
 
-  // ざっくり極性で並び順だけ自動調整
-  const sentiment = getSentimentRough(text); // 'positive' | 'negative' | 'neutral'
+  const sentiment = getSentimentRough(text);
   const eight = orderedEightBySentiment(sentiment);
 
-  await client.pushMessage(gid, { type:'text', text:'いまの気持ちに近いものを1つ選んでほしいにゃ' });
-  await client.pushMessage(gid, buildEmotionCarousel(eight));
+  // reply にまとめる（Push権限がなくても確実に届く）
+  await client.replyMessage(event.replyToken, [
+    { type:'text', text: empathy },
+    { type:'text', text:'いまの気持ちに近いものを1つ選んでほしいにゃ' },
+    buildEmotionCarousel(eight),
+  ]);
 
   sessions.set(gid, { step:2, payload:{utter:text} });
 }
+
 
 
 async function onPostback(event){
@@ -280,34 +317,29 @@ async function onPostback(event){
   const s = sessions.get(gid) || { step:0, payload:{} };
   const [ef, cmd, arg] = data.split(':');
 
-  if (cmd==='emo'){
+if (cmd==='emo'){
   const ek = arg;
   sessions.set(gid, { step:3, payload:{...s.payload, emotion_key:ek} });
   const label = EMOTIONS.find(e=>e.k===ek)?.l || 'その気持ち';
-  await client.replyMessage(event.replyToken, { type:'text', text:`${label} の強さはどれくらいか教えてほしいにゃ` });
-  await client.pushMessage(gid, buildIntensityCarousel(ek));
-}
-
-if (cmd==='other'){
-  sessions.set(gid, { step:3, payload:{...s.payload, emotion_key:'other'} });
-  await client.replyMessage(event.replyToken, { type:'text', text:'近い気持ちの名前を自由入力してほしいにゃ' });
+  await client.replyMessage(event.replyToken, [
+    { type:'text', text:`${label} の強さはどれくらいか教えてほしいにゃ` },
+    buildIntensityCarousel(ek),
+  ]);
 }
 
 if (cmd==='int'){
   const n = Number(arg);
   const ek = s.payload.emotion_key;
-  const utter = s.payload.utter || ''; // onText で保存した出来事テキスト
+  const utter = s.payload.utter || '';
 
-  // 出来事＋感情＋強さ → 自然文
   const sentence = renderFeelingSentence(utter, ek, n);
 
-  await client.replyMessage(event.replyToken, {
-    type:'text',
-    text: sentence
-  });
+  await client.replyMessage(event.replyToken, { type:'text', text: sentence });
+}
 
-  // （任意）ここで feelings 更新を行う場合は追記：
-  // await supabase.from('feelings').update({ emotion: ek, intensity: n }).eq('id', feelingId);
+  if (cmd==='other'){
+  sessions.set(gid, { step:3, payload:{...s.payload, emotion_key:'other'} });
+  await client.replyMessage(event.replyToken, { type:'text', text:'近い気持ちの名前を自由入力してほしいにゃ' });
 }
 
 
@@ -318,14 +350,12 @@ const PORT = process.env.PORT || 3000;
 
 // ---- Health Check & Root ----
 app.get('/healthz', (req, res) => {
-  // 外部サービスへアクセスしない（ここでOpenAI/Supabaseに触らないのが鉄則）
   res.status(200).json({
     status: 'ok',
     service: 'kemii',
-    // 簡易診断（値はマスク）
     env: {
-      channelAccessToken: !!process.env.CHANNEL_ACCESS_TOKEN,
-      channelSecret: !!process.env.CHANNEL_SECRET,
+      channelAccessToken: !!(process.env.CHANNEL_ACCESS_TOKEN || process.env.LINE_CHANNEL_ACCESS_TOKEN),
+      channelSecret: !!(process.env.CHANNEL_SECRET || process.env.LINE_CHANNEL_SECRET),
       openaiKey: !!process.env.OPENAI_API_KEY,
       supabaseUrl: !!process.env.SUPABASE_URL,
       supabaseKey: !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY),
@@ -333,6 +363,7 @@ app.get('/healthz', (req, res) => {
     time: new Date().toISOString(),
   });
 });
+
 
 app.get('/', (_req, res) => {
   res.status(200).send('Kemii is running');
