@@ -263,19 +263,67 @@ app.use('/webhook', express.raw({ type: '*/*' }), (req, _res, next) => {
   next();
 });
 
-// --- LINE SDK ミドルウェア適用（署名NGはここで401に）---
-app.post("/webhook", middleware(config), async (req, res) => {
-  try {
-    const events = req.body?.events || [];
-    console.log("[WEBHOOK RECEIVED]", events.length);
+import crypto from 'crypto';
 
-    await Promise.all(events.map(handleEvent));
-    return res.sendStatus(200);
-  } catch (e) {
-    console.error("[WEBHOOK_ERR]", e?.response?.data || e);
-    return res.sendStatus(200); // 再送ループ回避のため200
-  }
+// 署名検証
+function verifyLineSignature(signature, bodyBuffer, secret) {
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(bodyBuffer);
+  const expected = hmac.digest('base64');
+  return signature === expected;
+}
+
+// /webhook は「必ずすぐ 200」を返す
+app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
+  console.log('[HTTP] POST /webhook');
+  // 1) 即時に200を返す（Verifyタイムアウトを防止）
+  res.status(200).end();
+
+  // 2) ここから先は非同期で処理（レスポンス後なので時間がかかってもOK）
+  setImmediate(async () => {
+    try {
+      const signature = req.header('x-line-signature') || '';
+      const secret = config.channelSecret;
+      if (!secret) {
+        console.error('[SIGN] missing secret');
+        return;
+      }
+      const ok = verifyLineSignature(signature, req.body, secret);
+      console.log(ok ? '[SIGN] ok' : '[SIGN] invalid');
+
+      // 署名NGなら破棄（リトライ嵐を避けるため、ここでは何もしない）
+      if (!ok) return;
+
+      // JSON化（raw → JSON）
+      let payload = {};
+      try {
+        payload = JSON.parse(req.body.toString('utf8'));
+      } catch (e) {
+        console.error('[PARSE] JSON parse error', e);
+        return;
+      }
+
+      const events = Array.isArray(payload?.events) ? payload.events : [];
+      console.log('[WEBHOOK RECEIVED]', events.length);
+
+      for (const ev of events) {
+        // イベント詳細ログ（誰から来たか）
+        const src = ev?.source || {};
+        const who = src.userId ? src.userId.slice(-6) : '-';
+        const gid = src.groupId ? src.groupId.slice(-6) : '-';
+        const kind = ev?.type;
+        const mtype = ev?.message?.type;
+        const text = mtype === 'text' ? (ev.message.text || '').slice(0, 40) : mtype;
+        console.log(`[EV] type=${kind} user=*${who} group=*${gid} text=${text}`);
+
+        await handleEvent(ev); // ← 既存のハンドラをそのまま利用
+      }
+    } catch (e) {
+      console.error('[WEBHOOK_ASYNC_ERR]', e?.message || e);
+    }
+  });
 });
+
 
 
 
