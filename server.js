@@ -380,6 +380,31 @@ app.get('/healthz', (req, res) => {
   });
 });
 
+async function sendReply(replyToken, messages) {
+  try {
+    const arr = Array.isArray(messages) ? messages : [messages];
+    const r = await client.replyMessage(replyToken, arr);
+    console.log('[REPLY OK]', r);
+  } catch (e) {
+    const status = e?.status || e?.response?.status;
+    const data = e?.originalError?.response?.data || e?.response?.data || e?.message;
+    console.error('[REPLY ERROR]', status, data);
+
+    // ← 期限切れ時は push でフォールバック（権限がある場合）
+    if (status === 400 && String(data).includes('Invalid reply token')) {
+      const to = lastTargetIdFromEventContext(); // groupId || userId を取れる実装にしておく
+      if (to) {
+        try {
+          await client.pushMessage(to, { type:'text', text:'（けみー）遅くなっちゃった…もう一度送ってくれる？' });
+          console.log('[PUSH FALLBACK] sent');
+        } catch (pe) {
+          console.error('[PUSH ERROR]', pe?.response?.status, pe?.message);
+        }
+      }
+    }
+  }
+}
+
 
 app.get('/', (_req, res) => {
   res.status(200).send('Kemii is running');
