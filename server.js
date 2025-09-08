@@ -1,3 +1,10 @@
+// すべてのHTTPアクセスを1行ログ（/healthz も /webhook も）
+app.use((req, _res, next) => {
+  console.log(`[HTTP] ${req.method} ${req.url}`);
+  next();
+});
+
+
 // server.js
 
 import express from 'express';
