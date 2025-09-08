@@ -46,42 +46,18 @@ function getSentimentRough(text='') {
   return 'neutral';
 }
 
-// ---- 8感情の固定セット（POS4＋NEG4）と並び替え ----
-// ※内部キーは例です。あなたの EMOTIONS 定義に合わせてキーを調整してください。
-const POS_KEYS = ['joy','calm','affection','pride'];       // 例：喜び / 安心 / 愛情 / 誇り
-const NEG_KEYS = ['anxiety','anger','sadness','helpless']; // 例：不安 / 怒り / 悲しみ / 無力感
+// ---- 6感情の固定セット（POS2＋NEG4） ----
+const POS_KEYS = ['joy','gratitude'];
+const NEG_KEYS = ['anger','moyamoya','sadness','anxiety'];
 
-function orderedEightBySentiment(sentiment) {
+
+// 並び順：ネガティブならネガ先頭、ポジティブならポジ先頭
+function orderedSixBySentiment(sentiment) {
   if (sentiment === 'negative') return [...NEG_KEYS, ...POS_KEYS];
   if (sentiment === 'positive') return [...POS_KEYS, ...NEG_KEYS];
-  // neutral はとりあえずポジ先頭
-  return [...POS_KEYS, ...NEG_KEYS];
-}
+  return [...POS_KEYS, ...NEG_KEYS]; // neutral はポジ先頭
+};
 
-// ===== 自然文合成ユーティリティ（主語のねじれを防ぐ版） =====
-
-// 強さ(1-5)→ 副詞
-function intensityAdverb(n){
-  return { 1:'ちょっと', 2:'けっこう', 3:'かなり', 4:'すごく', 5:'最高に' }[n] || '';
-}
-
-// emotion_key → 述語（過去形）
-function emotionPredicate(ek){
-  const map = {
-    joy:'うれしかった',
-    calm:'ほっとした',
-    affection:'あたたかい気持ちになった',
-    pride:'誇らしく感じた',
-    anxiety:'不安に感じた',
-    anger:'イラッとした',
-    sadness:'さみしく感じた',
-    helpless:'どうにもならない気持ちになった',
-    grat:'ありがたい気持ちになった',
-    hope:'楽しみな気持ちになった',
-    relief:'ほっとした'
-  };
-  return map[ek] || '気持ちになった';
-}
 
 // 出来事テキストを軽く整形（句点削除など）
 function tidyEventText(raw=''){
@@ -215,29 +191,31 @@ async function generateEmpathySmart(message){
 }
 
 
-// ---- 感情カルーセル ----
-function buildEmotionCarousel(codes){
-  // 渡された codes（最大10件想定）をそのまま全件カラム化
-  const columns = codes.map(k=>{
-    const m = EMOTIONS.find(x=>x.k===k);
-    return {
-      thumbnailImageUrl:'https://dummyimage.com/600x400/ffffff/000.png&text=kemii',
-      title: m?.l || k,
-      text:  m?.desc || 'この気持ちに近い？',
-      actions:[{ type:'postback', label:'これにする', data:`ef:emo:${k}`, displayText:m?.l || k }]
-    };
-  });
+function buildEmotionCarousel(sentiment) {
+  const keys = orderedSixBySentiment(sentiment);
+  const items = keys
+    .map(k => EMOTIONS.find(e => e.k === k))
+    .filter(Boolean);
 
-  // 最後に「どれでもない」
-  columns.push({
-    thumbnailImageUrl:'https://dummyimage.com/600x400/ffffff/000.png&text=?',
-    title:'どれでもない',
-    text:'当てはまらないときは自由入力で近い気持ちを書いてね',
-    actions:[{ type:'postback', label:'自由入力する', data:'ef:other', displayText:'どれでもない' }]
-  });
-
-  return { type:'template', altText:'感情を選んでね', template:{ type:'carousel', columns } };
+  return {
+    type: 'template',
+    altText: '感情の選択',
+    template: {
+      type: 'buttons',
+      title: '今の気持ちに近いのは？',
+      text: '1つ選んでね',
+      actions: items.map(e => ({
+        type: 'postback',
+        label: e.l,
+        data: `ef:emo:${e.k}`,
+        displayText: e.l
+      }))
+    }
+  };
 }
+
+
+
 
 
 // ---- 強さカルーセル ----
@@ -330,14 +308,13 @@ async function onText(event){
 
   // ここから通常の最初の入力処理（既存ロジック）
   const empathy = await generateEmpathySmart(text);
-  const sentiment = getSentimentRough(text);
-  const eight = orderedEightBySentiment(sentiment);
-
-  await client.replyMessage(event.replyToken, [
-    { type:'text', text: empathy },
-    { type:'text', text:'いまの気持ちに近いものを1つ選んでほしいにゃ' },
-    buildEmotionCarousel(eight),
-  ]);
+  const sentiment = getSentimentRough(text); // 'positive' | 'negative' | 'neutral'
+// 8件配列は作らず、sentiment を直接渡す
+await sendReply(event.replyToken, [
+  { type:'text', text: empathy },
+  { type:'text', text:'いまの気持ちに近いものを1つ選んでほしいにゃ' },
+  buildEmotionCarousel(sentiment),
+]);
 
   sessions.set(gid, { step:2, payload:{ utter:text } });
 }
