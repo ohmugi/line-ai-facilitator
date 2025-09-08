@@ -118,59 +118,63 @@ function renderFeelingSentence(eventText, ek, intensity){
 }
 
 
-// ---- 感情カテゴリ（NVC準拠、desc付き） ----
+// ---- 感情カテゴリ（6種に整理） ----
 const EMOTIONS = [
-  { k:'joy',      l:'喜び',     desc:'うれしさ・幸せ・達成感' },
-  { k:'calm',     l:'安心',     desc:'落ち着き・安らぎ・余裕が戻る感じ' },
-  { k:'vitality', l:'活力',     desc:'元気・やる気・前に進める感じ' },
-  { k:'affection',l:'愛情',     desc:'親しみ・感謝・つながり' },
-  { k:'pride',    l:'誇り',     desc:'満足・自信・やり切れた感覚' },
-  { k:'anger',    l:'怒り',     desc:'いらだち・フラストレーション' },
-  { k:'sadness',  l:'悲しみ',   desc:'落胆・喪失感・孤独' },
-  { k:'anxiety',  l:'不安',     desc:'そわそわ・心配・恐れ' },
-  { k:'helpless', l:'無力感',   desc:'疲労・混乱・手につかない' },
-  { k:'shame',    l:'恥/罪悪感',desc:'後悔・自己否定・居心地の悪さ' },
+  { k:'joy',      l:'嬉しい',   desc:'うれしさ・満足感' },
+  { k:'gratitude',l:'感謝',     desc:'ありがたい・助かった・大事にされた感覚' },
+
+  { k:'anger',    l:'イライラ', desc:'カチンとする・思い通りにいかない' },
+  { k:'moyamoya', l:'モヤモヤ', desc:'はっきり言えない違和感・納得いかない感じ' },
+  { k:'sadness',  l:'悲しい',   desc:'傷ついた・がっかり・孤独' },
+  { k:'anxiety',  l:'不安',     desc:'心配・落ち着かない・そわそわ' },
 ];
 
 // ---- 感情別強さガイド ----
 const GUIDE = {
   joy: {
-    1:'少しだけうれしい（口元が緩む）',
-    2:'けっこううれしい（誰かに言いたい）',
-    3:'うれしい（気分が上向く）',
-    4:'とてもうれしい（体が軽い）',
-    5:'最高にうれしい（飛び上がりたい）',
+    1:'少しうれしい',
+    2:'けっこううれしい',
+    3:'うれしい',
+    4:'とてもうれしい',
+    5:'最高にうれしい',
+  },
+  gratitude: {
+    1:'ちょっとありがたい',
+    2:'ありがたい',
+    3:'とても感謝している',
+    4:'深く感謝している',
+    5:'本当に感謝している',
   },
   anger: {
-    1:'少しいらだつ（表情に出ない）',
-    2:'やや不快（チクリとする）',
-    3:'怒る（言葉がきつくなる）',
-    4:'かなり腹立つ（声が強くなる）',
-    5:'強い怒り（対話が難しい）',
+    1:'少しイラッとする',
+    2:'ややいらだつ',
+    3:'イライラする',
+    4:'かなりイライラ',
+    5:'強いイライラ',
+  },
+  moyamoya: {
+    1:'少し引っかかる',
+    2:'やや納得いかない',
+    3:'けっこう釈然としない',
+    4:'かなりモヤモヤする',
+    5:'強くモヤモヤする',
   },
   sadness: {
-    1:'少ししょんぼり（ため息）',
-    2:'やや落ち込む（気分が下向き）',
-    3:'胸が重い（集中しづらい）',
-    4:'かなりつらい（涙が出そう）',
-    5:'深く悲しい（何も手につかない）',
+    1:'少ししょんぼり',
+    2:'落ち込む',
+    3:'胸が重い',
+    4:'かなりつらい',
+    5:'深く悲しい',
   },
   anxiety: {
-    1:'少しそわそわ（注意が散る）',
-    2:'やや不安（考え直す）',
-    3:'落ち着かない（体に緊張）',
-    4:'かなり不安（最悪を想像）',
-    5:'強い恐れ（眠れない）',
+    1:'少しそわそわ',
+    2:'やや不安',
+    3:'落ち着かない',
+    4:'かなり不安',
+    5:'強い恐れ',
   },
-  calm: {
-    1:'少し落ち着く（肩の力が抜ける）',
-    2:'やや安心（呼吸が整う）',
-    3:'安心できる（視野が広がる）',
-    4:'だいぶ穏やか（余裕が戻る）',
-    5:'深く安らぐ（満たされる）',
-  },
-  // 他の感情も同じ形式で埋めてOK
 };
+
 
 // ---- 共感生成 ----
 async function generateEmpathyLong(message){
@@ -194,11 +198,22 @@ function localEmpathy(msg=''){
 
 
 async function generateEmpathySmart(message){
-  return await Promise.race([
-    generateEmpathyLong(message),
-    new Promise(res=>setTimeout(()=>res(localEmpathy(message)), 1800))
-  ]);
+  // 1回目: 4秒待つ
+  try {
+    return await Promise.race([
+      generateEmpathyLong(message),
+      new Promise((res)=>setTimeout(()=>res(null), 4000))
+    ]) || await Promise.race([
+      // 2回目: 追加で3秒待つ（合計最大7秒）
+      generateEmpathyLong(message),
+      new Promise((res)=>setTimeout(()=>res(null), 3000))
+    ]) || '教えてくれて助かるにゃ。もう少しだけ詳しく知りたいにゃ。どの辺が一番引っかかった？（約束／言い方／タイミング／その他）';
+  } catch {
+    // 失敗時も“掘り質問”を返す
+    return '教えてくれて助かるにゃ。もう少しだけ詳しく知りたいにゃ。どの辺が一番引っかかった？（約束／言い方／タイミング／その他）';
+  }
 }
+
 
 // ---- 感情カルーセル ----
 function buildEmotionCarousel(codes){
@@ -293,21 +308,40 @@ async function handleEvent(event){
 async function onText(event){
   const gid = event.source.groupId || event.source.userId;
   const text = event.message.text.trim();
+  const s = sessions.get(gid) || { step:0, payload:{} };
 
+  // ★ 自由入力の受け取りフェーズなら、共感生成をスキップして強さカルーセルへ直行
+  if (s.step === 'await_free_label') {
+    const ek = normalizeFeelingTo4(text) || 'moyamoya'; // 寄せられなければモヤモヤ扱い（方針に応じて変更可）
+    sessions.set(gid, { step:'await_intensity', payload:{ ...s.payload, emotion_key: ek, utter: s.payload.utter || s.payload.utter }});
+    const label = EMOTIONS.find(e=>e.k===ek)?.l || 'その気持ち';
+    await client.replyMessage(event.replyToken, [
+      { type:'text', text:`${label} の強さはどれくらい？` },
+      buildIntensityCarousel(ek),
+    ]);
+    return;
+  }
+
+  // ★ 強さ待ちなど、途中フェーズでは共感を出さない（防御）
+  if (s.step === 'await_intensity') {
+    await client.replyMessage(event.replyToken, { type:'text', text:'まずは強さを選んでね' });
+    return;
+  }
+
+  // ここから通常の最初の入力処理（既存ロジック）
   const empathy = await generateEmpathySmart(text);
-
   const sentiment = getSentimentRough(text);
   const eight = orderedEightBySentiment(sentiment);
 
-  // reply にまとめる（Push権限がなくても確実に届く）
   await client.replyMessage(event.replyToken, [
     { type:'text', text: empathy },
     { type:'text', text:'いまの気持ちに近いものを1つ選んでほしいにゃ' },
     buildEmotionCarousel(eight),
   ]);
 
-  sessions.set(gid, { step:2, payload:{utter:text} });
+  sessions.set(gid, { step:2, payload:{ utter:text } });
 }
+
 
 
 
@@ -333,14 +367,19 @@ if (cmd==='int'){
   const utter = s.payload.utter || '';
 
   const sentence = renderFeelingSentence(utter, ek, n);
-
   await client.replyMessage(event.replyToken, { type:'text', text: sentence });
+
+  sessions.delete(gid); // ★ ここで終了。次の入力は新規フロー
+  return;
 }
 
-  if (cmd==='other'){
-  sessions.set(gid, { step:3, payload:{...s.payload, emotion_key:'other'} });
-  await client.replyMessage(event.replyToken, { type:'text', text:'近い気持ちの名前を自由入力してほしいにゃ' });
+
+ if (cmd==='other'){
+  sessions.set(gid, { step: 'await_free_label', payload:{...s.payload} });
+  await client.replyMessage(event.replyToken, { type:'text', text:'どんな気持ちか、ひと言で教えてほしいにゃ（例：モヤモヤ／さみしい／心配 など）' });
+  return;
 }
+
 
 
 }
