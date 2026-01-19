@@ -1,4 +1,7 @@
 //server.js
+console.log("CWD:", process.cwd());
+console.log("DIR:", new URL('.', import.meta.url).pathname);
+
 import "dotenv/config";
 import express from "express";
 import crypto from "crypto";
