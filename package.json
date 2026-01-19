@@ -1,42 +1,19 @@
 {
-  "name": "line-openai-bot",
-  "version": "1.0.0",
-  "main": "server.js",
+  "name": "kemy-line-bot",
+  "version": "0.1.0",
   "type": "module",
+  "main": "server.js",
   "scripts": {
-  "dev": "node server.js",
-  "start": "node server.js",
-  "health": "curl -sS https://<your>.onrender.com/health || true",
-  "version": "curl -sS https://<your>.onrender.com/version || true",
-  "lint": "eslint .",
-  "format": "prettier -w ."
-},
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
   "engines": {
     "node": "20.x"
   },
   "dependencies": {
-    "@line/bot-sdk": "^7.4.0",
-    "@supabase/supabase-js": "^2.39.7",
-    "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "openai": "^4.20.0"
-  },
-  "description": "",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ohmugi/line-ai-facilitator.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/ohmugi/line-ai-facilitator/issues"
-  },
-  "homepage": "https://github.com/ohmugi/line-ai-facilitator#readme",
-  "devDependencies": {
-    "@eslint/js": "^9.33.0",
-    "eslint": "^9.33.0",
-    "eslint-plugin-react": "^7.37.5",
-    "globals": "^16.3.0"
+    "@supabase/supabase-js": "^2.39.7",
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.0.3"
   }
 }
