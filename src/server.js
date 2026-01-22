@@ -1,6 +1,10 @@
 //server.js
 console.log("CWD:", process.cwd());
 console.log("DIR:", new URL('.', import.meta.url).pathname);
+console.log("FILES CHECK", {
+  reply: import.meta.url,
+});
+
 
 import "dotenv/config";
 import express from "express";
