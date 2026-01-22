@@ -2,12 +2,12 @@
   "name": "kemy-line-bot",
   "version": "0.2.0",
   "type": "module",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node src/server.js",
     "start": "node src/server.js"
-
-  },
+  }
+},
   "engines": {
     "node": "20.x"
   },
