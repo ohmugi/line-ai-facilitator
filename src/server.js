@@ -1,14 +1,14 @@
-//server.js
+// src/server.js
 console.log("CWD:", process.cwd());
-console.log("DIR:", new URL('.', import.meta.url).pathname);
+console.log("DIR:", new URL(".", import.meta.url).pathname);
 console.log("FILES CHECK", {
-  reply: import.meta.url,
+  self: import.meta.url,
 });
-
 
 import "dotenv/config";
 import express from "express";
 import crypto from "crypto";
+import { middleware } from "@line/bot-sdk";
 
 import { replyText } from "./line/reply.js";
 import { saveMessage, getSessionTranscript } from "./supabase/messages.js";
@@ -23,12 +23,31 @@ import {
 import { generateNextQuestion } from "./ai/nextQuestion.js";
 
 const app = express();
-app.use(express.json());
 
+/**
+ * =========================
+ * LINE Middleware
+ * =========================
+ */
+const lineMiddleware = middleware({
+  channelSecret: process.env.LINE_CHANNEL_SECRET,
+});
+
+/**
+ * =========================
+ * 定数
+ * =========================
+ */
 const START_SIGNAL = "はじめる";
 const MAX_QUESTIONS = 3;
 
-// 1問目はDBから（固定でもOKだが、今はDBランダムに統一）
+/**
+ * =========================
+ * 質問送信ロジック
+ * =========================
+ */
+
+// 1問目（DBランダム）
 async function sendFirstQuestion(replyToken, householdId, sessionId) {
   const q = await getRandomQuestion();
 
@@ -42,7 +61,7 @@ async function sendFirstQuestion(replyToken, householdId, sessionId) {
   await replyText(replyToken, `Aに聞くね。\n${q.text}`);
 }
 
-// セッションの途中質問（OpenAIで生成）
+// 2問目以降（OpenAI）
 async function sendNextAiQuestion(replyToken, householdId, sessionId) {
   const transcript = await getSessionTranscript({ householdId, sessionId });
 
@@ -58,13 +77,43 @@ async function sendNextAiQuestion(replyToken, householdId, sessionId) {
   await replyText(replyToken, `Aに聞くね。\n${nextQ}`);
 }
 
+/**
+ * =========================
+ * Health Check
+ * =========================
+ */
 app.get("/health", (_, res) => res.status(200).send("ok"));
 
-app.post("/webhook", async (req, res) => {
-  try {
-    const event = req.body.events?.[0];
-    if (!event || event.type !== "message" || event.message.type !== "text") {
-      return res.sendStatus(200);
+/**
+ * =========================
+ * Webhook（最重要）
+ * =========================
+ * - LINE には即 200 を返す
+ * - 中身の処理は非同期で切り離す
+ */
+app.post("/webhook", lineMiddleware, (req, res) => {
+  // ✅ LINE には即レス
+  res.sendStatus(200);
+
+  // ❗重い処理は後ろで
+  handleWebhookEvents(req.body.events).catch((err) => {
+    console.error("[handleWebhookEvents error]", err);
+  });
+});
+
+/**
+ * =========================
+ * Webhook 中身の処理
+ * =========================
+ */
+async function handleWebhookEvents(events = []) {
+  for (const event of events) {
+    // text message 以外は無視
+    if (
+      event.type !== "message" ||
+      event.message?.type !== "text"
+    ) {
+      continue;
     }
 
     const userText = event.message.text.trim();
@@ -72,28 +121,26 @@ app.post("/webhook", async (req, res) => {
     const source = event.source;
 
     // グループ以外は無視
-    if (source.type !== "group") {
-      return res.sendStatus(200);
+    if (source?.type !== "group") {
+      continue;
     }
 
     const householdId = source.groupId;
 
-    // --- セッション開始合図 ---
+    // --- セッション開始 ---
     if (userText === START_SIGNAL) {
       const sessionId = crypto.randomUUID();
       startSession(householdId, sessionId, MAX_QUESTIONS);
 
-      // 1問目（DBから）
       await sendFirstQuestion(replyToken, householdId, sessionId);
-
-      return res.sendStatus(200);
+      continue;
     }
 
     // --- セッション中 ---
     if (isSessionActive(householdId)) {
       const session = getSession(householdId);
 
-      // ユーザー発言を保存（今はA固定。後でA/Bに拡張）
+      // ユーザー発言保存（今は A 固定）
       await saveMessage({
         householdId,
         role: "A",
@@ -101,33 +148,39 @@ app.post("/webhook", async (req, res) => {
         sessionId: session.sessionId,
       });
 
-      // 次の質問を続けるか（コード側）
       const shouldContinue = proceedSession(householdId);
 
       if (!shouldContinue) {
-        // 最後に「仮整理」っぽい1通（今は固定文。後でAI化してもOK）
         await replyText(
           replyToken,
           "いまの話を並べると、大事にしている背景がいくつかありそうだね。"
         );
         endSession(householdId);
-        return res.sendStatus(200);
+        continue;
       }
 
-      // 2問目以降：OpenAIで「深掘り質問」を1つ生成
-      await sendNextAiQuestion(replyToken, householdId, session.sessionId);
-
-      return res.sendStatus(200);
+      // 次の深掘り質問
+      await sendNextAiQuestion(
+        replyToken,
+        householdId,
+        session.sessionId
+      );
     }
-
-    // セッション外の通常発言は無視（今は）
-    return res.sendStatus(200);
-  } catch (err) {
-    console.error("[webhook error]", err);
-    return res.sendStatus(200); // LINEには200返すのが安全
   }
-});
+}
 
+/**
+ * =========================
+ * JSON parser（webhook 後）
+ * =========================
+ */
+app.use(express.json());
+
+/**
+ * =========================
+ * Server Start
+ * =========================
+ */
 app.listen(3000, () => {
   console.log("server running on 3000");
 });
