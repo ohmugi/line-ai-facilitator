@@ -42,14 +42,12 @@ const MAX_QUESTIONS = 3;
 /**
  * Webhook
  */
-// 一時的にこれだけにする
+// ★これだけにする
 app.post("/webhook", (req, res) => {
+  console.log("webhook hit");
   res.sendStatus(200);
-
-  handleWebhookEvents(req.body.events).catch((err) => {
-    console.error("[handleWebhookEvents error]", err);
-  });
 });
+
 
 
 
