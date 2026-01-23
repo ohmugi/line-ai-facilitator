@@ -44,14 +44,13 @@ const MAX_QUESTIONS = 3;
  */
 // 一時的にこれだけにする
 app.post("/webhook", (req, res) => {
-  console.log("webhook hit");
   res.sendStatus(200);
-});
-
 
   handleWebhookEvents(req.body.events).catch((err) => {
     console.error("[handleWebhookEvents error]", err);
   });
+});
+
 
 
 async function handleWebhookEvents(events = []) {
