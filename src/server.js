@@ -52,9 +52,10 @@ app.post("/webhook", (req, res) => {
 
 
 async function handleWebhookEvents(events = []) {
+  console.log("source.type =", source?.type);
+
   for (const event of events) {
     if (event.type !== "message" || event.message?.type !== "text") continue;
-    if (event.source?.type !== "group") continue;
 
     const userText = event.message.text.trim();
     const replyToken = event.replyToken;
