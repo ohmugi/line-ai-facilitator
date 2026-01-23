@@ -50,19 +50,16 @@ const MAX_QUESTIONS = 3;
 app.post(
   "/webhook",
   bodyParser.raw({ type: "application/json" }),
-  lineMiddleware,
+  // ❌ lineMiddleware を一旦外す
   (req, res) => {
-    console.log("webhook hit");
+    console.log("webhook hit (NO middleware)");
     console.log("buffer?", Buffer.isBuffer(req.body));
-    console.log("content-type =", req.headers["content-type"]);
+    console.log("body =", req.body.toString());
 
     res.sendStatus(200);
-
-    handleWebhookEvents(req.body.events).catch((err) => {
-      console.error("[handleWebhookEvents error]", err);
-    });
   }
 );
+
 
 
 
