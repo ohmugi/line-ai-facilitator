@@ -20,8 +20,7 @@ import bodyParser from "body-parser";
 
 const app = express();
 
-console.log("buffer?", Buffer.isBuffer(req.body));
-console.log("content-type =", req.headers["content-type"]);
+
 
 
 /**
@@ -54,7 +53,8 @@ app.post(
   lineMiddleware,
   (req, res) => {
     console.log("webhook hit");
-    console.log("raw body length =", req.body.length);
+    console.log("buffer?", Buffer.isBuffer(req.body));
+    console.log("content-type =", req.headers["content-type"]);
 
     res.sendStatus(200);
 
@@ -63,6 +63,7 @@ app.post(
     });
   }
 );
+
 
 
 app.use(express.json());
