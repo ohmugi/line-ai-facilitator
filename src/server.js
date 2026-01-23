@@ -15,6 +15,8 @@ import {
   endSession,
 } from "./session/sessionManager.js";
 import { generateNextQuestion } from "./ai/nextQuestion.js";
+import bodyParser from "body-parser";
+
 
 const app = express();
 
@@ -27,7 +29,7 @@ app.get("/health", (_, res) => res.status(200).send("ok"));
 /**
  * JSON parser
  */
-app.use(express.json());
+
 
 /**
  * LINE Middleware
@@ -42,16 +44,24 @@ const MAX_QUESTIONS = 3;
 /**
  * Webhook
  */
-app.post("/webhook", lineMiddleware, (req, res) => {
-  console.log("webhook hit");
-  res.sendStatus(200);
+app.post(
+  "/webhook",
+  bodyParser.raw({ type: "application/json" }),
+  lineMiddleware,
+  (req, res) => {
+    console.log("webhook hit");
+    console.log("raw body length =", req.body.length);
 
-  handleWebhookEvents(req.body.events).catch((err) => {
-    console.error("[handleWebhookEvents error]", err);
-  });
-});
+    res.sendStatus(200);
+
+    handleWebhookEvents(req.body.events).catch((err) => {
+      console.error("[handleWebhookEvents error]", err);
+    });
+  }
+);
 
 
+app.use(express.json());
 
 
 
