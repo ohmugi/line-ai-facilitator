@@ -20,6 +20,10 @@ import bodyParser from "body-parser";
 
 const app = express();
 
+console.log("buffer?", Buffer.isBuffer(req.body));
+console.log("content-type =", req.headers["content-type"]);
+
+
 /**
  * Health check（Render 用）
  */
