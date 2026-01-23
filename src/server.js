@@ -52,7 +52,7 @@ app.post("/webhook", (req, res) => {
   handleWebhookEvents(req.body.events).catch((err) => {
     console.error("[handleWebhookEvents error]", err);
   });
-});
+
 
 async function handleWebhookEvents(events = []) {
   for (const event of events) {
