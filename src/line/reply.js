@@ -1,4 +1,4 @@
-//src/line/reply.js
+// src/line/reply.js
 
 import axios from "axios";
 
@@ -9,8 +9,8 @@ export async function replyText(replyToken, text) {
       replyToken,
       messages: [
         {
-          type: "text"import axios from "axios";,
-          text,
+          type: "text",
+          text: text,
         },
       ],
     },
