@@ -1,4 +1,6 @@
 // src/server.js
+console.log("SERVER FILE LOADED");
+
 import "dotenv/config";
 import express from "express";
 import crypto from "crypto";
@@ -25,6 +27,10 @@ const app = express();
  */
 app.get("/", (_, res) => res.status(200).send("ok"));
 app.get("/health", (_, res) => res.status(200).send("ok"));
+app.use((req, res, next) => {
+  console.log("INCOMING:", req.method, req.url);
+  next();
+});
 
 /**
  * =========================
