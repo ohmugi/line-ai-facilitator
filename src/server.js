@@ -48,12 +48,22 @@ const MAX_QUESTIONS = 3;
 /**
  * Webhook
  */
-app.post("/webhook", lineMiddleware, (req, res) => {
-  console.log("webhook hit (middleware OK)");
-  res.sendStatus(200);
+app.post(
+  "/webhook",
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+  lineMiddleware,
+  (req, res) => {
+    console.log("webhook hit (middleware OK)");
+    res.sendStatus(200);
 
-  handleWebhookEvents(req.body.events).catch(console.error);
-});
+    handleWebhookEvents(req.body.events).catch(console.error);
+  }
+);
+
 
 /**
  * Webhook handler
