@@ -1,3 +1,7 @@
+//src/line/reply.js
+
+import axios from "axios";
+
 export async function replyText(replyToken, text) {
   await axios.post(
     "https://api.line.me/v2/bot/message/reply",
@@ -5,7 +9,7 @@ export async function replyText(replyToken, text) {
       replyToken,
       messages: [
         {
-          type: "text",
+          type: "text"import axios from "axios";,
           text,
         },
       ],
