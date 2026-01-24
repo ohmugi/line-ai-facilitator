@@ -184,6 +184,31 @@ async function sendNextAiQuestion(replyToken, householdId, sessionId) {
   await replyText(replyToken, `Aに聞くね。\n${nextQ}`);
 }
 
+function validateLineSignature(req) {
+  const signature = req.headers["x-line-signature"];
+
+  const computed = crypto
+    .createHmac("sha256", process.env.LINE_CHANNEL_SECRET)
+    .update(req.rawBody)
+    .digest("base64");
+
+  console.log("=== SIGNATURE DEBUG ===");
+  console.log("header signature :", signature);
+  console.log("computed signature:", computed);
+  console.log("secret length     :", process.env.LINE_CHANNEL_SECRET?.length);
+  console.log("rawBody length    :", req.rawBody?.length);
+  console.log("=======================");
+
+  return computed === signature;
+}
+
+console.log(
+  "rawBody first 50 bytes:",
+  req.rawBody.slice(0, 50).toString("hex")
+);
+
+
+
 /**
  * =========================
  * Server Start
