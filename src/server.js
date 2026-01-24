@@ -15,13 +15,8 @@ import {
   endSession,
 } from "./session/sessionManager.js";
 import { generateNextQuestion } from "./ai/nextQuestion.js";
-import bodyParser from "body-parser";
-
 
 const app = express();
-
-
-
 
 /**
  * Health check（Render 用）
@@ -30,16 +25,22 @@ app.get("/", (_, res) => res.status(200).send("ok"));
 app.get("/health", (_, res) => res.status(200).send("ok"));
 
 /**
- * JSON parser
- */
-
-
-/**
  * LINE Middleware
  */
 const lineMiddleware = middleware({
   channelSecret: process.env.LINE_CHANNEL_SECRET,
 });
+
+/**
+ * rawBody を保持する JSON parser
+ */
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 const START_SIGNAL = "はじめる";
 const MAX_QUESTIONS = 3;
@@ -47,35 +48,28 @@ const MAX_QUESTIONS = 3;
 /**
  * Webhook
  */
-app.post(
-  "/webhook",
-  bodyParser.raw({ type: "application/json" }),
-  // ❌ lineMiddleware を一旦外す
-  (req, res) => {
-    console.log("webhook hit (NO middleware)");
-    console.log("buffer?", Buffer.isBuffer(req.body));
-    console.log("body =", req.body.toString());
+app.post("/webhook", lineMiddleware, (req, res) => {
+  console.log("webhook hit (middleware OK)");
+  res.sendStatus(200);
 
-    res.sendStatus(200);
-  }
-);
+  handleWebhookEvents(req.body.events).catch(console.error);
+});
 
-
-
-
-app.use(express.json());
-
-
-
+/**
+ * Webhook handler
+ */
 async function handleWebhookEvents(events = []) {
-  console.log("source.type =", source?.type);
-
   for (const event of events) {
+    console.log("source.type =", event.source?.type);
+
     if (event.type !== "message" || event.message?.type !== "text") continue;
 
     const userText = event.message.text.trim();
     const replyToken = event.replyToken;
-    const householdId = event.source.groupId;
+
+    const source = event.source;
+    const householdId =
+      source.groupId || source.roomId || source.userId;
 
     if (userText === START_SIGNAL) {
       const sessionId = crypto.randomUUID();
@@ -95,7 +89,10 @@ async function handleWebhookEvents(events = []) {
       });
 
       if (!proceedSession(householdId)) {
-        await replyText(replyToken, "いまの話を並べると、大事にしている背景がいくつかありそうだね。");
+        await replyText(
+          replyToken,
+          "いまの話を並べると、大事にしている背景がいくつかありそうだね。"
+        );
         endSession(householdId);
         continue;
       }
@@ -108,9 +105,7 @@ async function handleWebhookEvents(events = []) {
 /**
  * Server start
  */
-const PORT = Number(process.env.PORT);
-if (!PORT) throw new Error("PORT is not set");
-
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`server running on ${PORT}`);
 });
