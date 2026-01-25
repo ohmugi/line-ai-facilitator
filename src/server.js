@@ -18,7 +18,6 @@ import {
 } from "./session/sessionManager.js";
 import { generateNextQuestion } from "./ai/nextQuestion.js";
 import { getActiveScene } from "./db/scenes.js";
-import { replyText } from "./line/reply.js";
 
 const app = express();
 
