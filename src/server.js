@@ -139,7 +139,7 @@ async function handleWebhookEvents(events = []) {
         startSession(householdId, sessionId, MAX_QUESTIONS);
 
         // await sendFirstScene(replyToken, householdId, sessionId);
-        await replyText(replyToken, "けみーだにゃ🐾 いくにゃ");
+        await sendFirstScene(replyToken);
 
         continue;
       }
@@ -174,6 +174,29 @@ async function handleWebhookEvents(events = []) {
   }
 }
 
+/**
+ * =========================
+ * シーン送信
+ * =========================
+ */
+async function sendFirstScene(replyToken) {
+  const scene = await getActiveScene();
+
+  if (!scene) {
+    await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
+    return;
+  }
+
+  const message =
+`けみーだにゃ🐾
+ちょっと考えてほしい場面があるにゃ。
+
+${scene.scene_text}
+
+この場面、どう感じるか教えてほしいにゃ🐾`;
+
+  await replyText(replyToken, message);
+}
 
 
 /**
