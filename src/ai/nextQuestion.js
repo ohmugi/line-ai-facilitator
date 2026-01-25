@@ -1,11 +1,16 @@
-import { openai } from "./client.js";
+// src/ai/nextQuestion.js
+import OpenAI from "openai";
+
+// ★ これを追加
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // transcript: [{role:'A'|'B'|'AI', text:string, created_at:...}, ...]
 export async function generateNextQuestion({ transcript }) {
-  // セッション内の会話を「そのまま」渡す（あなたの要件）
   const dialogue = transcript
     .map((m) => {
-      const speaker = m.role === "AI" ? "けみー" : m.role; // A/B/けみー
+      const speaker = m.role === "AI" ? "けみー" : m.role;
       return `${speaker}: ${m.text}`;
     })
     .join("\n");
@@ -35,7 +40,7 @@ ${dialogue}
 `;
 
   const resp = await openai.chat.completions.create({
-    model: "gpt-4.1-mini", // まずは安価で十分。後で変更OK
+    model: "gpt-4.1-mini",
     messages: [
       { role: "system", content: system.trim() },
       { role: "user", content: user.trim() },
@@ -45,6 +50,5 @@ ${dialogue}
   });
 
   const text = resp.choices?.[0]?.message?.content?.trim() || "";
-  // 保険：空なら無難な質問を返す（壊れにくく）
   return text || "その場面で、あなたがいちばん気になっていたのは何だった？";
 }
