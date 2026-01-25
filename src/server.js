@@ -146,36 +146,42 @@ async function handleWebhookEvents(events = []) {
       }
 
       // ===== セッション中 =====
-      if (isSessionActive(householdId)) {
+   if (isSessionActive(householdId)) {
   const session = getSession(householdId);
 
-  // ===== 感情フェーズ =====
-  if (session.phase === "emotion") {
-    const userEmotion = userText;
+  /**
+   * ===== 価値観フェーズ =====
+   */
+  if (session.phase === "value") {
+    const userReason = userText;
 
     await saveMessage({
       householdId,
       role: "A",
-      text: userEmotion,
+      text: userReason,
       sessionId: session.sessionId,
     });
 
-    await replyText(replyToken, "教えてくれてありがとうにゃ🐾");
+    // AIで「価値観の芽」をやさしく返す
+    const aiReply = await generateValueReflection({
+      emotion: getSessionTranscript({ householdId, sessionId: session.sessionId }),
+      reason: userReason,
+    });
 
-    // 次フェーズへ（準備だけ）
-    session.phase = "value";
+    await replyText(replyToken, aiReply);
+
+    // セッションはここで一旦終える（次は将来、相手へ）
+    endSession(householdId);
 
     await replyText(
       replyToken,
-      "その気持ちが生まれた理由を、もう少しだけ一緒に考えてみたいにゃ。\nなんでそう感じたと思うか、思いつくことがあれば教えてほしいにゃ🐾"
+      "教えてくれてありがとうにゃ🐾\n次は、パートナーにも同じ場面を聞いてみたいにゃ。"
     );
 
     continue;
   }
 
-
-
-
+  
         await sendNextAiQuestion(replyToken, householdId, session.sessionId);
         continue;
       }
