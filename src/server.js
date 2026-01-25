@@ -8,7 +8,7 @@ import crypto from "crypto";
 // 既存ロジック
 import { replyText } from "./line/reply.js";
 import { saveMessage, getSessionTranscript } from "./supabase/messages.js";
-import { getRandomQuestion } from "./supabase/questions.js";
+// import { getRandomQuestion } from "./supabase/questions.js";
 import {
   startSession,
   isSessionActive,
@@ -123,7 +123,7 @@ async function handleWebhookEvents(events = []) {
     if (userText === START_SIGNAL) {
       const sessionId = crypto.randomUUID();
       startSession(householdId, sessionId, MAX_QUESTIONS);
-      await sendFirstQuestion(replyToken, householdId, sessionId);
+      // await sendFirstQuestion(replyToken, householdId, sessionId);
       continue;
     }
 
@@ -180,18 +180,19 @@ ${scene.scene_text}
  * 質問送信
  * =========================
  */
-async function sendFirstQuestion(replyToken, householdId, sessionId) {
-  const q = await getRandomQuestion();
+// async function sendFirstQuestion(replyToken, householdId, sessionId) {
+//   const q = await getRandomQuestion();
+//
+//   await saveMessage({
+//     householdId,
+//     role: "AI",
+//     text: q.text,
+//     sessionId,
+//   });
+//
+//   await replyText(replyToken, `Aに聞くね。\n${q.text}`);
+// }
 
-  await saveMessage({
-    householdId,
-    role: "AI",
-    text: q.text,
-    sessionId,
-  });
-
-  await replyText(replyToken, `Aに聞くね。\n${q.text}`);
-}
 
 async function sendNextAiQuestion(replyToken, householdId, sessionId) {
   const transcript = await getSessionTranscript({ householdId, sessionId });
