@@ -17,6 +17,8 @@ import {
   endSession,
 } from "./session/sessionManager.js";
 import { generateNextQuestion } from "./ai/nextQuestion.js";
+import { getActiveScene } from "./db/scenes.js";
+import { replyText } from "./line/reply.js";
 
 const app = express();
 
@@ -149,6 +151,30 @@ async function handleWebhookEvents(events = []) {
     }
   }
 }
+
+async function handleMessageEvent(event) {
+  const replyToken = event.replyToken;
+  const userText = event.message?.text ?? "";
+
+  // いまは条件を絞らず、何が来ても scene を返す
+  const scene = await getActiveScene();
+
+  if (!scene) {
+    await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
+    return;
+  }
+
+  const message =
+`けみーだにゃ🐾
+ちょっと考えてほしい場面があるにゃ。
+
+${scene.scene_text}
+
+この場面、思い浮かびそうかにゃ？`;
+
+  await replyText(replyToken, message);
+}
+
 
 /**
  * =========================
