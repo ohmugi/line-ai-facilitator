@@ -18,6 +18,8 @@ import {
 } from "./session/sessionManager.js";
 import { generateNextQuestion } from "./ai/nextQuestion.js";
 import { getActiveScene } from "./db/scenes.js";
+import { getEmotionExamples } from "./supabase/emotionExamples.js";
+
 
 const app = express();
 
@@ -124,8 +126,7 @@ async function handleWebhookEvents(events = []) {
       startSession(householdId, sessionId, MAX_QUESTIONS);
 
       // await sendFirstScene(replyToken, householdId, sessionId);
-      await replyText(replyToken, "けみーだにゃ🐾 はじめるにゃ");
-
+      await sendFirstScene(replyToken, householdId);
       continue;
     }
 
@@ -139,30 +140,41 @@ async function handleWebhookEvents(events = []) {
         startSession(householdId, sessionId, MAX_QUESTIONS);
 
         // await sendFirstScene(replyToken, householdId, sessionId);
-        await sendFirstScene(replyToken);
+        await sendFirstScene(replyToken, householdId);
 
         continue;
       }
 
       // ===== セッション中 =====
       if (isSessionActive(householdId)) {
-        const session = getSession(householdId);
+  const session = getSession(householdId);
 
-        await saveMessage({
-          householdId,
-          role: "A",
-          text: userText,
-          sessionId: session.sessionId,
-        });
+  // ===== 感情フェーズ =====
+  if (session.phase === "emotion") {
+    const userEmotion = userText;
 
-        if (!proceedSession(householdId)) {
-          await replyText(
-            replyToken,
-            "いまの話を並べると、大事にしている背景がいくつかありそうだにゃ🐾"
-          );
-          endSession(householdId);
-          continue;
-        }
+    await saveMessage({
+      householdId,
+      role: "A",
+      text: userEmotion,
+      sessionId: session.sessionId,
+    });
+
+    await replyText(replyToken, "教えてくれてありがとうにゃ🐾");
+
+    // 次フェーズへ（準備だけ）
+    session.phase = "value";
+
+    await replyText(
+      replyToken,
+      "その気持ちが生まれた理由を、もう少しだけ一緒に考えてみたいにゃ。\nなんでそう感じたと思うか、思いつくことがあれば教えてほしいにゃ🐾"
+    );
+
+    continue;
+  }
+
+
+
 
         await sendNextAiQuestion(replyToken, householdId, session.sessionId);
         continue;
@@ -178,8 +190,7 @@ async function handleWebhookEvents(events = []) {
  * =========================
  * シーン送信
  * =========================
- */
-async function sendFirstScene(replyToken) {
+ */async function sendFirstScene(replyToken, householdId) {
   const scene = await getActiveScene();
 
   if (!scene) {
@@ -187,16 +198,35 @@ async function sendFirstScene(replyToken) {
     return;
   }
 
+  const examples = await getEmotionExamples();
+  const exampleLines = examples
+    .map(e => `・「${e}」`)
+    .join("\n");
+
   const message =
 `けみーだにゃ🐾
 ちょっと考えてほしい場面があるにゃ。
 
 ${scene.scene_text}
 
-この場面、どう感じるか教えてほしいにゃ🐾`;
+この場面を思い浮かべたとき、
+いちばん最初に浮かんだ気持ちを教えてほしいにゃ🐾
+
+うまく言葉にならなくても大丈夫にゃ。
+
+たとえば…
+${exampleLines}
+
+近い感じでも、ちがう言葉でも大丈夫にゃ🐾`;
+
+  // セッションにフェーズをセット
+  const session = getSession(householdId);
+  session.phase = "emotion";
+  session.sceneId = scene.id;
 
   await replyText(replyToken, message);
 }
+
 
 
 /**
