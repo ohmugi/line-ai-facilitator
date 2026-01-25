@@ -109,23 +109,43 @@ app.post(
  */
 async function handleWebhookEvents(events = []) {
   for (const event of events) {
+    console.log("EVENT TYPE =", event.type);
     console.log("source.type =", event.source?.type);
-
-    if (event.type !== "message" || event.message?.type !== "text") continue;
-
-    const userText = event.message.text.trim();
-    const replyToken = event.replyToken;
 
     const source = event.source;
     const householdId =
       source.groupId || source.roomId || source.userId;
 
-    if (userText === START_SIGNAL) {
-      const sessionId = crypto.randomUUID();
-      startSession(householdId, sessionId, MAX_QUESTIONS);
-      // await sendFirstQuestion(replyToken, householdId, sessionId);
+    // ===== message（テキスト入力） =====
+    if (event.type === "message" && event.message?.type === "text") {
+      const userText = event.message.text.trim();
+      const replyToken = event.replyToken;
+
+      if (userText === START_SIGNAL) {
+        const sessionId = crypto.randomUUID();
+        startSession(householdId, sessionId, MAX_QUESTIONS);
+        // await sendFirstScene(replyToken, householdId, sessionId);
+        continue;
+      }
+
+      // ここに通常の会話処理
       continue;
     }
+
+    // ===== postback（リッチメニュー） =====
+    if (event.type === "postback") {
+      const replyToken = event.replyToken;
+
+      // postback.data を見てもいいし、まずは全部START扱いでOK
+      const sessionId = crypto.randomUUID();
+      startSession(householdId, sessionId, MAX_QUESTIONS);
+
+      // await sendFirstScene(replyToken, householdId, sessionId);
+      continue;
+    }
+  }
+}
+
 
     if (isSessionActive(householdId)) {
       const session = getSession(householdId);
@@ -148,8 +168,7 @@ async function handleWebhookEvents(events = []) {
 
       await sendNextAiQuestion(replyToken, householdId, session.sessionId);
     }
-  }
-}
+ 
 
 async function handleMessageEvent(event) {
   const replyToken = event.replyToken;
