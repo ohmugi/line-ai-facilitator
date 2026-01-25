@@ -116,82 +116,64 @@ async function handleWebhookEvents(events = []) {
     const householdId =
       source.groupId || source.roomId || source.userId;
 
-    // ===== message（テキスト入力） =====
-    if (event.type === "message" && event.message?.type === "text") {
-      const userText = event.message.text.trim();
-      const replyToken = event.replyToken;
-
-      if (userText === START_SIGNAL) {
-        const sessionId = crypto.randomUUID();
-        startSession(householdId, sessionId, MAX_QUESTIONS);
-        // await sendFirstScene(replyToken, householdId, sessionId);
-        continue;
-      }
-
-      // ここに通常の会話処理
-      continue;
-    }
+    const replyToken = event.replyToken;
 
     // ===== postback（リッチメニュー） =====
     if (event.type === "postback") {
-      const replyToken = event.replyToken;
-
-      // postback.data を見てもいいし、まずは全部START扱いでOK
       const sessionId = crypto.randomUUID();
       startSession(householdId, sessionId, MAX_QUESTIONS);
 
       // await sendFirstScene(replyToken, householdId, sessionId);
+      await replyText(replyToken, "けみーだにゃ🐾 はじめるにゃ");
+
       continue;
     }
-  }
-}
 
+    // ===== message（テキスト） =====
+    if (event.type === "message" && event.message?.type === "text") {
+      const userText = event.message.text.trim();
 
-    if (isSessionActive(householdId)) {
-      const session = getSession(householdId);
+      // セッション開始
+      if (userText === START_SIGNAL) {
+        const sessionId = crypto.randomUUID();
+        startSession(householdId, sessionId, MAX_QUESTIONS);
 
-      await saveMessage({
-        householdId,
-        role: "A",
-        text: userText,
-        sessionId: session.sessionId,
-      });
+        // await sendFirstScene(replyToken, householdId, sessionId);
+        await replyText(replyToken, "けみーだにゃ🐾 いくにゃ");
 
-      if (!proceedSession(householdId)) {
-        await replyText(
-          replyToken,
-          "いまの話を並べると、大事にしている背景がいくつかありそうだね。"
-        );
-        endSession(householdId);
         continue;
       }
 
-      await sendNextAiQuestion(replyToken, householdId, session.sessionId);
+      // ===== セッション中 =====
+      if (isSessionActive(householdId)) {
+        const session = getSession(householdId);
+
+        await saveMessage({
+          householdId,
+          role: "A",
+          text: userText,
+          sessionId: session.sessionId,
+        });
+
+        if (!proceedSession(householdId)) {
+          await replyText(
+            replyToken,
+            "いまの話を並べると、大事にしている背景がいくつかありそうだにゃ🐾"
+          );
+          endSession(householdId);
+          continue;
+        }
+
+        await sendNextAiQuestion(replyToken, householdId, session.sessionId);
+        continue;
+      }
+
+      // セッション外の通常メッセージ
+      await replyText(replyToken, "けみーは聞いてるにゃ🐾");
     }
- 
-
-async function handleMessageEvent(event) {
-  const replyToken = event.replyToken;
-  const userText = event.message?.text ?? "";
-
-  // いまは条件を絞らず、何が来ても scene を返す
-  const scene = await getActiveScene();
-
-  if (!scene) {
-    await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
-    return;
   }
-
-  const message =
-`けみーだにゃ🐾
-ちょっと考えてほしい場面があるにゃ。
-
-${scene.scene_text}
-
-この場面、思い浮かびそうかにゃ？`;
-
-  await replyText(replyToken, message);
 }
+
 
 
 /**
