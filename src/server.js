@@ -19,6 +19,7 @@ import {
 import { generateNextQuestion } from "./ai/nextQuestion.js";
 import { getActiveScene } from "./db/scenes.js";
 import { getEmotionExamples } from "./supabase/emotionExamples.js";
+import { generateValueReflection } from "./ai/valueReflection.js";
 
 
 const app = express();
