@@ -23,6 +23,7 @@ import { generateValueReflection } from "./ai/valueReflection.js";
 
 
 const app = express();
+console.log("SESSION PHASE =", session.phase);
 
 /**
  * =========================
@@ -147,45 +148,55 @@ async function handleWebhookEvents(events = []) {
       }
 
       // ===== セッション中 =====
-   if (isSessionActive(householdId)) {
+ if (isSessionActive(householdId)) {
   const session = getSession(householdId);
 
   /**
-   * ===== 価値観フェーズ =====
+   * ===== 感情フェーズ（最優先）=====
    */
-  if (session.phase === "value") {
-    const userReason = userText;
-
+  if (session.phase === "emotion") {
     await saveMessage({
       householdId,
       role: "A",
-      text: userReason,
+      text: userText,
       sessionId: session.sessionId,
     });
 
-    // AIで「価値観の芽」をやさしく返す
-    const aiReply = await generateValueReflection({
-      emotion: getSessionTranscript({ householdId, sessionId: session.sessionId }),
-      reason: userReason,
-    });
+    await replyText(replyToken, "教えてくれてありがとうにゃ🐾");
 
-    await replyText(replyToken, aiReply);
-
-    // セッションはここで一旦終える（次は将来、相手へ）
-    endSession(householdId);
+    session.phase = "value";
 
     await replyText(
       replyToken,
-      "教えてくれてありがとうにゃ🐾\n次は、パートナーにも同じ場面を聞いてみたいにゃ。"
+      "その気持ちが生まれた理由を、もう少しだけ一緒に考えてみたいにゃ。\nなんでそう感じたと思うか、思いつくことがあれば教えてほしいにゃ🐾"
     );
 
+    continue; // ★ ここで必ず抜ける
+  }
+
+  /**
+   * ===== 既存ロジック（後回し）=====
+   */
+  await saveMessage({
+    householdId,
+    role: "A",
+    text: userText,
+    sessionId: session.sessionId,
+  });
+
+  if (!proceedSession(householdId)) {
+    await replyText(
+      replyToken,
+      "いまの話を並べると、大事にしている背景がいくつかありそうだにゃ🐾"
+    );
+    endSession(householdId);
     continue;
   }
 
-  
-        await sendNextAiQuestion(replyToken, householdId, session.sessionId);
-        continue;
-      }
+  await sendNextAiQuestion(replyToken, householdId, session.sessionId);
+  continue;
+}
+
 
       // セッション外の通常メッセージ
       await replyText(replyToken, "けみーは聞いてるにゃ🐾");
