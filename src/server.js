@@ -150,8 +150,14 @@ async function handleWebhookEvents(events = []) {
       // ===== セッション中 =====
  if (isSessionActive(householdId)) {
   const session = getSession(householdId);
+console.log(
+  "[SESSION]",
+  "householdId =", householdId,
+  "phase =", session.phase,
+  "sceneId =", session.sceneId
+);
 
-   console.log("SESSION PHASE =", session.phase);
+
 
   /**
    * ===== 感情フェーズ（最優先）=====
