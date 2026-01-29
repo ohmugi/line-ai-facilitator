@@ -173,6 +173,8 @@ async function handleWebhookEvents(events = []) {
 
     continue; // ★ ここで必ず抜ける
   }
+   console.log("SESSION PHASE =", session.phase);
+
 
   /**
    * ===== 既存ロジック（後回し）=====
@@ -196,6 +198,7 @@ async function handleWebhookEvents(events = []) {
   await sendNextAiQuestion(replyToken, householdId, session.sessionId);
   continue;
 }
+
 
 
       // セッション外の通常メッセージ
