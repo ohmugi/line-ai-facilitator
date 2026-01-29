@@ -151,6 +151,8 @@ async function handleWebhookEvents(events = []) {
  if (isSessionActive(householdId)) {
   const session = getSession(householdId);
 
+   console.log("SESSION PHASE =", session.phase);
+
   /**
    * ===== 感情フェーズ（最優先）=====
    */
@@ -173,7 +175,7 @@ async function handleWebhookEvents(events = []) {
 
     continue; // ★ ここで必ず抜ける
   }
-   console.log("SESSION PHASE =", session.phase);
+   
 
 
   /**
