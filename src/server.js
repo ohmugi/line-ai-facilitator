@@ -161,25 +161,30 @@ console.log(
   /**
    * ===== 感情フェーズ（最優先）=====
    */
-  if (session.phase === "emotion") {
-    await saveMessage({
-      householdId,
-      role: "A",
-      text: userText,
-      sessionId: session.sessionId,
-    });
+if (session.phase === "emotion") {
+  await saveMessage({
+    householdId,
+    role: "A",
+    text: userText,
+    sessionId: session.sessionId,
+  });
 
-    await replyText(replyToken, "教えてくれてありがとうにゃ🐾");
+  session.phase = "value";
 
-    session.phase = "value";
+  await replyText(
+    replyToken,
+`教えてくれてありがとうにゃ🐾
 
-    await replyText(
-      replyToken,
-      "その気持ちが生まれた理由を、もう少しだけ一緒に考えてみたいにゃ。\nなんでそう感じたと思うか、思いつくことがあれば教えてほしいにゃ🐾"
-    );
+その気持ちが生まれた理由を、
+もう少しだけ一緒に考えてみたいにゃ。
 
-    continue; // ★ ここで必ず抜ける
-  }
+さっきの場面の「どんなところ」に
+反応した気がするか、思いつくことがあれば教えてほしいにゃ🐾`
+  );
+
+  continue;
+}
+
    
 
 
