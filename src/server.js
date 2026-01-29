@@ -23,7 +23,6 @@ import { generateValueReflection } from "./ai/valueReflection.js";
 
 
 const app = express();
-console.log("SESSION PHASE =", session.phase);
 
 /**
  * =========================
