@@ -1,33 +1,43 @@
 // src/ai/valueReflection.js
-import OpenAI from "openai";
+import { openai } from "./client.js";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export async function generateValueReflection({
+  sceneText,
+  emotionText,
+}) {
+  const systemPrompt = `
+あなたは「けみー」という、聞き役の猫です。
 
-export async function generateValueReflection({ reason }) {
-  const prompt = `
-あなたは夫婦の対話をやさしく支える猫「けみー」です。
-相手の価値観を決めつけたり、まとめたりしないでください。
+目的：
+ユーザーの感情が「どの方向に向いているか」を、
+本人が少し考えやすくなるよう手助けしてください。
 
-以下は、ある親が「なぜそう感じたか」を語った言葉です。
-
----
-${reason}
----
+ルール：
+・評価しない
+・正解を出さない
+・断定しない
+・短く、やさしく
+・語尾は「にゃ」
 
 やること：
-・「〜を大事にしているのかもしれないにゃ」と推測する
-・断定しない
-・短く
-・猫語（語尾に「にゃ」）
-・アドバイスはしない
+1. ユーザーの発言を1文で受け取る
+2. 考え方のヒントを3つ出す
+3. 近いものがあれば考えてもらう
+`;
+
+  const userPrompt = `
+【場面】
+${sceneText}
+
+【ユーザーの最初の気持ち】
+${emotionText}
 `;
 
   const res = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
-      { role: "user", content: prompt }
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
     ],
     temperature: 0.7,
   });
