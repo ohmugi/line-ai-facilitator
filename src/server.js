@@ -169,18 +169,23 @@ if (session.phase === "emotion") {
     sessionId: session.sessionId,
   });
 
-  session.phase = "value";
+  const scene = await getActiveScene(); // いまは雑でOK
 
-  await replyText(
-    replyToken,
-`教えてくれてありがとうにゃ🐾
+  const aiMessage = await generateValueReflection({
+    sceneText: scene.scene_text,
+    emotionText: userText,
+  });
 
-その気持ちが生まれた理由を、
-もう少しだけ一緒に考えてみたいにゃ。
+  await saveMessage({
+    householdId,
+    role: "AI",
+    text: aiMessage,
+    sessionId: session.sessionId,
+  });
 
-さっきの場面の「どんなところ」に
-反応した気がするか、思いつくことがあれば教えてほしいにゃ🐾`
-  );
+  session.phase = "direction"; // 仮でOK
+
+  await replyText(replyToken, aiMessage);
 
   continue;
 }
