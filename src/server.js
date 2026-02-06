@@ -16,6 +16,8 @@ import {
 
 import { getActiveScene } from "./db/scenes.js";
 import { getEmotionExamples } from "./supabase/emotionExamples.js";
+import { getLineProfile } from "./line/getProfile.js";
+
 
 // AI
 import { generateDirection } from "./ai/generateDirection.js";
@@ -104,6 +106,11 @@ async function handleWebhookEvents(events = []) {
         event.message.text.trim() === START_SIGNAL)
     ) {
       startSession(householdId, crypto.randomUUID());
+      const profile = await getLineProfile(source.userId);
+　　　const displayName = profile?.displayName || "あなた";
+
+　　　const session = getSession(householdId);
+　　　session.currentUserName = displayName;
       await sendSceneAndEmotion(replyToken, householdId);
       continue;
     }
@@ -157,12 +164,13 @@ async function handleWebhookEvents(events = []) {
         case "direction": {
           session.phase = "background";
           await replyText(
-            replyToken,
-            `そう感じた理由として、
+  replyToken,
+  `${session.currentUserName}さん、
+そう感じた理由として、
 自分のこれまでの経験や前提が
-関係していそうなところはあるかにゃ？
-はっきりしてなくても大丈夫にゃ🐾`
-          );
+関係していそうなところはあるかにゃ？`
+);
+
           break;
         }
 
@@ -223,8 +231,21 @@ async function sendSceneAndEmotion(replyToken, householdId) {
   const examples = await getEmotionExamples();
   const exampleLines = examples.map(e => `・${e}`).join("\n");
 
+  async function sendSceneAndEmotion(replyToken, householdId) {
+  const scene = await getActiveScene();
+  if (!scene) {
+    await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
+    return;
+  }
+
+  const session = getSession(householdId);
+  const name = session.currentUserName || "あなた";
+
+  const examples = await getEmotionExamples();
+  const exampleLines = examples.map(e => `・${e}`).join("\n");
+
   const message = `
-けみーだにゃ🐾
+${name}さん、けみーだにゃ🐾
 ちょっと考えてほしい場面があるにゃ。
 
 ${scene.scene_text}
@@ -236,6 +257,13 @@ ${scene.scene_text}
 たとえば…
 ${exampleLines}
 `;
+
+  session.phase = "scene_emotion";
+  session.sceneId = scene.id;
+
+  await replyText(replyToken, message);
+}
+
 
   const session = getSession(householdId);
   session.phase = "scene_emotion";
