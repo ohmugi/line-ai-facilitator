@@ -147,36 +147,37 @@ continue;
          * ①② scene + emotion → ユーザー①
          */
         case "scene_emotion": {
-          const directionText = await generateDirection({
-            sceneId: session.sceneId,
-            emotionText: userText,
-          });
+  // ユーザーの感情はすでに保存済み
 
-          session.phase = "direction";
+  // 次は「価値観／社会規範フェーズ」へ
+  session.phase = "value_norm";
 
-          await saveMessage({
-            householdId,
-            role: "AI",
-            text: directionText,
-            sessionId: session.sessionId,
-          });
+  await replyText(
+    replyToken,
+    `${session.currentUserName}さん、
+その気持ちの裏に、どんな考えがありそうかにゃ？
+思いつく範囲で大丈夫にゃ🐾`
+  );
 
-          await replyText(replyToken, directionText);
-          break;
-        }
+  break;
+}
+
 
         /**
          * ③ direction → ユーザー②
          */
-        case "direction": {
-          session.phase = "background";
-          await replyText(
-  replyToken,
-  `${session.currentUserName}さん、
-そう感じた理由として、
-自分のこれまでの経験や前提が
-関係していそうなところはあるかにゃ？`
-);
+        case "value_norm": {
+  session.phase = "background";
+
+  await replyText(
+    replyToken,
+    `${session.currentUserName}さん、
+その考えは、どんな経験から生まれたと思うかにゃ？
+はっきりしてなくても大丈夫にゃ🐾`
+  );
+  break;
+}
+
 
           break;
         }
