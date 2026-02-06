@@ -150,79 +150,86 @@ continue;
   // ユーザーの感情はすでに保存済み
 
   // 次は「価値観／社会規範フェーズ」へ
-  session.phase = "value_norm";
+ switch (session.phase) {
 
-  await replyText(
-    replyToken,
-    `${session.currentUserName}さん、
+  /**
+   * ① scene + emotion → ユーザー①
+   */
+  case "scene_emotion": {
+    session.phase = "value_norm";
+
+    await replyText(
+      replyToken,
+      `${session.currentUserName}さん、
 その気持ちの裏に、どんな考えがありそうかにゃ？
 思いつく範囲で大丈夫にゃ🐾`
-  );
+    );
+    break;
+  }
 
-  break;
-}
+  /**
+   * ② 価値観／社会規範 → ユーザー②
+   */
+  case "value_norm": {
+    session.phase = "background";
 
-
-        /**
-         * ③ direction → ユーザー②
-         */
-        case "value_norm": {
-  session.phase = "background";
-
-  await replyText(
-    replyToken,
-    `${session.currentUserName}さん、
+    await replyText(
+      replyToken,
+      `${session.currentUserName}さん、
 その考えは、どんな経験から生まれたと思うかにゃ？
 はっきりしてなくても大丈夫にゃ🐾`
-  );
-  break;
-}
+    );
+    break;
+  }
 
+  /**
+   * ③ background → ユーザー③
+   */
+  case "background": {
+    const reflection = await generateReflection({
+      backgroundText: userText,
+    });
 
-          break;
-        }
+    session.phase = "reflection";
 
-        /**
-         * ④ background → ユーザー③
-         */
-        case "background": {
-          const reflection = await generateReflection({
-            backgroundText: userText,
-          });
+    await saveMessage({
+      householdId,
+      role: "AI",
+      text: reflection,
+      sessionId: session.sessionId,
+    });
 
-          session.phase = "reflection";
+    await replyText(replyToken, reflection);
+    break;
+  }
 
-          await saveMessage({
-            householdId,
-            role: "AI",
-            text: reflection,
-            sessionId: session.sessionId,
-          });
+  /**
+   * ④ reflection → セッション終了
+   */
+  case "reflection": {
+    session.phase = "closing";
 
-          await replyText(replyToken, reflection);
-          break;
-        }
-
-        /**
-         * ⑤⑥ reflection → ユーザー④（任意）
-         */
-        case "reflection": {
-          session.phase = "closing";
-          await replyText(
-            replyToken,
-            `ここまで一緒に考えてくれてありがとうにゃ🐾
+    await replyText(
+      replyToken,
+      `${session.currentUserName}さん、
+ここまで一緒に考えてくれてありがとうにゃ🐾
 今日は、気持ちの奥にある見え方が
 少し整理できた気がするにゃ。
 
 また別の場面でも考えてみるにゃ🐾`
-          );
-          endSession(householdId);
-          break;
-        }
-      }
-    }
+    );
+
+    endSession(householdId);
+    break;
+  }
+
+  default: {
+    console.warn("未知のフェーズ:", session.phase);
+    await replyText(replyToken, "けみーは聞いてるにゃ🐾");
+    break;
   }
 }
+
 
 /**
  * =========================
