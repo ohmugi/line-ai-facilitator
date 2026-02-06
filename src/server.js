@@ -105,14 +105,21 @@ async function handleWebhookEvents(events = []) {
         event.message?.type === "text" &&
         event.message.text.trim() === START_SIGNAL)
     ) {
-      startSession(householdId, crypto.randomUUID());
-      const profile = await getLineProfile(source.userId);
-　　　const displayName = profile?.displayName || "あなた";
+     startSession(householdId, crypto.randomUUID());
 
-　　　const session = getSession(householdId);
-　　　session.currentUserName = displayName;
-      await sendSceneAndEmotion(replyToken, householdId);
-      continue;
+// 名前を取得
+const profile = await getLineProfile(source.userId);
+const displayName = profile?.displayName || "あなた";
+
+// セッションに必要な情報をまとめて入れる（★ここが重要）
+const session = getSession(householdId);
+session.currentUserId = source.userId;   // ← 追加
+session.currentUserName = displayName;   // ← 既存
+session.finishedUsers = [];              // ← 追加（切り替え用）
+
+await sendSceneAndEmotion(replyToken, householdId);
+continue;
+
     }
 
     // --- テキスト ---
@@ -228,22 +235,13 @@ async function sendSceneAndEmotion(replyToken, householdId) {
     return;
   }
 
-  const examples = await getEmotionExamples();
-  const exampleLines = examples.map(e => `・${e}`).join("\n");
-
-  async function sendSceneAndEmotion(replyToken, householdId) {
-  const scene = await getActiveScene();
-  if (!scene) {
-    await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
-    return;
-  }
-
   const session = getSession(householdId);
   const name = session.currentUserName || "あなた";
 
   const examples = await getEmotionExamples();
   const exampleLines = examples.map(e => `・${e}`).join("\n");
 
+  // ★★★ ここでちゃんと message を定義する ★★★
   const message = `
 ${name}さん、けみーだにゃ🐾
 ちょっと考えてほしい場面があるにゃ。
@@ -258,19 +256,13 @@ ${scene.scene_text}
 ${exampleLines}
 `;
 
+  // セッション状態の更新
   session.phase = "scene_emotion";
   session.sceneId = scene.id;
 
   await replyText(replyToken, message);
 }
 
-
-  const session = getSession(householdId);
-  session.phase = "scene_emotion";
-  session.sceneId = scene.id;
-
-  await replyText(replyToken, message);
-}
 
 /**
  * =========================
