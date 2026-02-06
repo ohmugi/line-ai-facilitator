@@ -98,7 +98,9 @@ async function handleWebhookEvents(events = []) {
       source.groupId || source.roomId || source.userId;
     const replyToken = event.replyToken;
 
-    // --- セッション開始（postback / はじめる）---
+    // =============================
+    // セッション開始（postback / はじめる）
+    // =============================
     if (
       event.type === "postback" ||
       (event.type === "message" &&
@@ -121,7 +123,9 @@ async function handleWebhookEvents(events = []) {
       continue;
     }
 
-    // --- テキストメッセージ ---
+    // =============================
+    // テキストメッセージ処理
+    // =============================
     if (event.type === "message" && event.message?.type === "text") {
       const userText = event.message.text.trim();
 
@@ -133,7 +137,7 @@ async function handleWebhookEvents(events = []) {
       const session = getSession(householdId);
       console.log("[SESSION]", householdId, session.phase);
 
-      // ユーザーの発話を保存
+      // ユーザー発話を保存
       await saveMessage({
         householdId,
         role: "A",
@@ -141,6 +145,7 @@ async function handleWebhookEvents(events = []) {
         sessionId: session.sessionId,
       });
 
+      // ★★★★★ ここから switch ★★★★★
       switch (session.phase) {
 
         /**
@@ -220,64 +225,10 @@ async function handleWebhookEvents(events = []) {
           break;
         }
       }
+      // ★★★★★ switch ここまで ★★★★★
     }
   }
 }
-  /**
-   * ④ reflection → セッション終了
-   */
-  case "reflection": {
-    session.phase = "closing";
-
-    await replyText(
-      replyToken,
-      `${session.currentUserName}さん、
-ここまで一緒に考えてくれてありがとうにゃ🐾
-今日は、気持ちの奥にある見え方が
-少し整理できた気がするにゃ。
-
-また別の場面でも考えてみるにゃ🐾`
-    );
-
-    endSession(householdId);
-    break;
-  }
-
-  default: {
-    console.warn("未知のフェーズ:", session.phase);
-    await replyText(replyToken, "けみーは聞いてるにゃ🐾");
-    break;
-  }
-}
-
-  /**
-   * ④ reflection → セッション終了
-   */
-  case "reflection": {
-    session.phase = "closing";
-
-    await replyText(
-      replyToken,
-      `${session.currentUserName}さん、
-ここまで一緒に考えてくれてありがとうにゃ🐾
-今日は、気持ちの奥にある見え方が
-少し整理できた気がするにゃ。
-
-また別の場面でも考えてみるにゃ🐾`
-    );
-
-    endSession(householdId);
-    break;
-  }
-
-  default: {
-    console.warn("未知のフェーズ:", session.phase);
-    await replyText(replyToken, "けみーは聞いてるにゃ🐾");
-    break;
-  }
-}
-
-
 /**
  * =========================
  * scene + emotion
