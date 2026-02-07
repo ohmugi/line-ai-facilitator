@@ -4,23 +4,17 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function generateBackgroundOptions({
-  emotionAnswer,
-  valueChoice,
-  sceneText,
-}) {
+export async function generateBackgroundOptions(context) {
   const prompt = `
-あなたは、夫婦向けLINE Bot「けみー」の思考補助AIです。
-
 【これまでの文脈】
 シーン：
-${sceneText || "不明"}
+${context.sceneText || "不明"}
 
 ユーザーの感情：
-${emotionAnswer || "不明"}
+${context.emotion || "不明"}
 
-ユーザーが選んだ考えの例：
-${valueChoice || "不明"}
+ユーザーが選んだ価値観：
+${context.value || "不明"}
 
 【あなたの役割（超重要）】
 ユーザーの過去を“当てる”必要はありません。
