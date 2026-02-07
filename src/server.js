@@ -238,33 +238,36 @@ async function handleWebhookEvents(events = []) {
  * =========================
  */
 async function sendSceneAndEmotion(replyToken, householdId) {
+  // 先に session を取得（←重要）
+  const session = getSession(householdId);
+
   const scene = await getActiveScene();
   if (!scene) {
     await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
     return;
   }
 
-  // ★ ここが重要：DBから3択を取得
-  const examples = await getEmotionExamples(); 
-  const options = examples.map(e => e.label); // ← クイックリプライにそのまま使う
+  // DBからクイックリプライ用の選択肢を取得
+  const examples = await getEmotionExamples();
+  const options = examples.map((e) => e.label);
 
-  const message = `
-${session.currentUserName}さん、けみーだにゃ🐾
+  // session を使うのは、取得後にする
+  const userName = session.currentUserName || "あなた";
+
+  const message =
+`${userName}さん、けみーだにゃ🐾
 ちょっと考えてほしい場面があるにゃ。
 
 ${scene.scene_text}
 
 この場面を思い浮かべたとき、
 いちばん最初に浮かんだ気持ちを
-えらんでほしいにゃ🐾
-`;
+えらんでほしいにゃ🐾`;
 
-  // セッション初期化
-  const session = getSession(householdId);
+  // セッション状態を更新
   session.phase = "scene_emotion";
   session.sceneId = scene.id;
 
-  // ★ ここを replyText → replyQuickText に変更
   await replyQuickText(replyToken, message, options);
 }
 
