@@ -19,14 +19,13 @@ import { getEmotionExamples } from "./supabase/emotionExamples.js";
 import { getLineProfile } from "./line/getProfile.js";
 import { replyTextWithQuickReply } from "./line/reply.js";
 import { replyQuickText } from "./line/replyQuick.js";
-import { generateValueOptions } from "./ai/generateValueOptions.js";
-
-
-
 
 // AI
 import { generateDirection } from "./ai/generateDirection.js";
 import { generateReflection } from "./ai/generateReflection.js";
+import { generateValueOptions } from "./ai/generateValueOptions.js";
+import { generateBackgroundOptions } from "./ai/generateBackgroundOptions.js";
+
 
 const app = express();
 
@@ -185,16 +184,57 @@ async function handleWebhookEvents(events = []) {
 
 
 case "value_norm_choice": {
-  session.phase = "background";
+  console.log("[DEBUG] value_norm_choice 入力:", userText);
 
-  await replyText(
-    replyToken,
-    `${session.currentUserName}さん、
+  // 選んだ価値観を保存（あとで使う）
+  session.lastValueChoice = userText;
+
+  // 次は「背景のクイックリプライ」
+  session.phase = "background_choice";
+  console.log("[DEBUG] phase -> background_choice");
+
+  // ★ 背景の選択肢をAIに作らせる
+  const options = await generateBackgroundOptions({
+    emotionAnswer: session.lastEmotionAnswer,
+    valueChoice: session.lastValueChoice,
+    sceneText: session.sceneId,
+  });
+
+  const msg = `${session.currentUserName}さん、
 その考えは、どんな経験から生まれたと思うかにゃ？
-はっきりしてなくても大丈夫にゃ🐾`
-  );
+いちばん近いものをえらんでほしいにゃ🐾`;
+
+  await replyQuickText(replyToken, msg, options);
   break;
 }
+          case "background_choice": {
+  console.log("[DEBUG] background_choice 入力:", userText);
+
+  // 選んだ背景を保存（あとで使う）
+  session.lastBackgroundChoice = userText;
+
+  // 次はまとめへ
+  session.phase = "reflection";
+  console.log("[DEBUG] phase -> reflection");
+
+  const reflection = await generateReflection({
+    backgroundText: userText,
+    valueChoice: session.lastValueChoice,
+    emotionAnswer: session.lastEmotionAnswer,
+  });
+
+  await saveMessage({
+    householdId,
+    role: "AI",
+    text: reflection,
+    sessionId: session.sessionId,
+  });
+
+  await replyText(replyToken, reflection);
+  break;
+}
+
+
 
 
 
