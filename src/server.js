@@ -156,46 +156,31 @@ async function handleWebhookEvents(events = []) {
         /**
          * ① scene + emotion → ② 価値観／社会規範へ
          */
-        case "scene_emotion": {
+       case "scene_emotion": {
   console.log("[DEBUG] scene_emotion 入力:", userText);
 
-  // ★ 重要：クイックリプライの答えを必ず保存
+  // 感情を保存
   session.lastEmotionAnswer = userText;
 
-  // ★ 重要：フェーズを“確実に”進める
-  session.phase = "value_norm";
-
-  console.log("[DEBUG] phase -> value_norm");
-
-  await replyText(
-    replyToken,
-    `${session.currentUserName}さん、
-その気持ちの裏に、どんな考えがありそうかにゃ？
-思いつく範囲で大丈夫にゃ🐾`
-  );
-  break;
-}
-case "value_norm": {
-  console.log("[DEBUG] value_norm 入力:", userText);
-
-  const userValueText = userText;
-
+  // ★ いきなり次は「AIクイックリプライフェーズ」
   session.phase = "value_norm_choice";
   console.log("[DEBUG] phase -> value_norm_choice");
 
+  // ★ ここで“質問＋選択肢”をまとめて出す
   const options = await generateValueOptions({
     emotionAnswer: session.lastEmotionAnswer,
-    valueText: userValueText,
+    valueText: null,          // ← まだ自由記述はない
     sceneText: session.sceneId,
   });
 
   const msg = `${session.currentUserName}さん、
-いまの考えにいちばん近いものをえらんでほしいにゃ🐾`;
+その気持ちの裏に、どんな考えがありそうかにゃ？
+いちばん近いものをえらんでほしいにゃ🐾`;
 
   await replyQuickText(replyToken, msg, options);
-
   break;
 }
+
 
 
 
