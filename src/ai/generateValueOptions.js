@@ -1,5 +1,8 @@
 import OpenAI from "openai";
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function generateValueOptions({
   emotionAnswer,
@@ -10,7 +13,7 @@ export async function generateValueOptions({
 あなたは、夫婦向けLINE Bot「けみー」の思考補助AIです。
 
 【状況】
-シーン：${sceneText}
+シーン：${sceneText || "不明"}
 ユーザーの感情：${emotionAnswer || "不明"}
 ユーザーの考え：${valueText}
 
@@ -19,11 +22,13 @@ export async function generateValueOptions({
 「価値観／社会規範」として自然な3つの選択肢を短文で出してください。
 
 
+
 【ルール】
-・3つだけ出す
+・必ず3つだけ
 ・体言止め（〜したい、〜が大事 などOK）
 ・説教っぽくしない
-・重ならないようにする
+・意味が重ならないようにする
+・余計な説明はしない（選択肢だけ出す）
 `;
 
   const res = await openai.chat.completions.create({
@@ -31,12 +36,23 @@ export async function generateValueOptions({
     messages: [{ role: "user", content: prompt }],
   });
 
-  // 想定：改行区切りで返ってくるので整形
   const text = res.choices[0].message.content.trim();
+
+  // 箇条書き想定で整形
   const options = text
     .split("\n")
-    .map(s => s.replace(/^[-・]\s*/, "")) // 先頭の「-」や「・」を除去
+    .map(s => s.replace(/^[-・]\s*/, ""))
+    .filter(s => s.length > 0)
     .slice(0, 3);
+
+  // 万が一AIが失敗したときの保険（超重要）
+  if (options.length < 3) {
+    return [
+          "子どもの気持ちを尊重したい",
+         "周りに流されすぎたくない",
+         "自分なりに考えて判断したい",
+    ];
+  }
 
   return options;
 }
