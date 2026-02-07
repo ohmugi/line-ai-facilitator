@@ -4,20 +4,20 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function generateVisionOptions({
-  emotionAnswer,
-  valueChoice,
-  backgroundChoice,
-  sceneText,
-}) {
+export async function generateVisionOptions(context) {
   const prompt = `
-あなたは、夫婦向けLINE Bot「けみー」の思考補助AIです。
-
 【これまでの文脈】
-シーン：${sceneText || "不明"}
-ユーザーの感情：${emotionAnswer || "不明"}
-ユーザーが選んだ価値観：${valueChoice || "不明"}
-その価値観が生まれた背景：${backgroundChoice || "不明"}
+シーン：
+${context.sceneText || "不明"}
+
+ユーザーの感情：
+${context.emotion || "不明"}
+
+ユーザーの価値観：
+${context.value || "不明"}
+
+その背景：
+${context.background || "不明"}
 
 【やってほしいこと】
 この流れを踏まえて、
