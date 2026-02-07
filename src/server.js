@@ -170,16 +170,39 @@ async function handleWebhookEvents(events = []) {
          * ② 価値観／社会規範 → ③ 背景へ
          */
         case "value_norm": {
-          session.phase = "background";
+  // ユーザーの入力をいったん保存（後で使う）
+  const userValueText = userText;
 
-          await replyText(
-            replyToken,
-            `${session.currentUserName}さん、
+  // 次のフェーズへ
+  session.phase = "value_norm_choice";
+
+  // ★★★ AIに3択を作らせる ★★★
+  const options = await generateValueOptions({
+    emotionAnswer: session.lastEmotionAnswer, // あれば
+    valueText: userValueText,
+    sceneText: session.sceneId, // 必要なら
+  });
+
+  await replyQuickText(
+    replyToken,
+いまの考えにいちばん近いものをえらんでほしいにゃ🐾`,
+    options
+  );
+
+  break;
+}
+case "value_norm_choice": {
+  session.phase = "background";
+
+  await replyText(
+    replyToken,
+    `${session.currentUserName}さん、
 その考えは、どんな経験から生まれたと思うかにゃ？
 はっきりしてなくても大丈夫にゃ🐾`
-          );
-          break;
-        }
+  );
+  break;
+}
+
 
         /**
          * ③ background → ④ まとめ（reflection）
