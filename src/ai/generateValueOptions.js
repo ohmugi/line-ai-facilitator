@@ -4,20 +4,17 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function generateValueOptions({
-  emotionAnswer,
-  valueText,
-  sceneText,
-}) {
+export async function generateValueOptions(context) {
   const prompt = `
-あなたは、夫婦向けLINE Bot「けみー」の思考補助AIです。
-
 【これまでの文脈】
 シーン：
-${sceneText || "不明"}
+${context.sceneText || "不明"}
 
 ユーザーの感情：
-${emotionAnswer || "不明"}
+${context.emotion || "不明"}
+
+ユーザーの価値観：
+${context.value || "（まだなし）"}
 
 【あなたの役割（超重要）】
 あなたは「正解を当てる人」ではありません。
