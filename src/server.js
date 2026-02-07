@@ -169,28 +169,31 @@ async function handleWebhookEvents(events = []) {
         /**
          * ② 価値観／社会規範 → ③ 背景へ
          */
-        case "value_norm": {
-  // ユーザーの入力をいったん保存（後で使う）
+        await replyQuickText(
+  replyToken,
+  `${session.currentUserName}さん、
+いまの考えにいちばん近いものをえらんでほしいにゃ🐾`,
+  options
+);
+case "value_norm": {
   const userValueText = userText;
 
-  // 次のフェーズへ
   session.phase = "value_norm_choice";
 
-  // ★★★ AIに3択を作らせる ★★★
   const options = await generateValueOptions({
     emotionAnswer: session.lastEmotionAnswer, // あれば
     valueText: userValueText,
     sceneText: session.sceneId, // 必要なら
   });
 
-  await replyQuickText(
-    replyToken,
-いまの考えにいちばん近いものをえらんでほしいにゃ🐾`,
-    options
-  );
+  const msg = `${session.currentUserName}さん、
+いまの考えにいちばん近いものをえらんでほしいにゃ🐾`;
+
+  await replyQuickText(replyToken, msg, options);
 
   break;
 }
+
 case "value_norm_choice": {
   session.phase = "background";
 
