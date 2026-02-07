@@ -17,6 +17,9 @@ import {
 import { getActiveScene } from "./db/scenes.js";
 import { getEmotionExamples } from "./supabase/emotionExamples.js";
 import { getLineProfile } from "./line/getProfile.js";
+import { replyTextWithQuickReply } from "./line/reply.js";
+import { replyQuickText } from "./line/replyQuick.js";
+
 
 
 // AI
@@ -241,33 +244,30 @@ async function sendSceneAndEmotion(replyToken, householdId) {
     return;
   }
 
-  const session = getSession(householdId);
-  const name = session.currentUserName || "あなた";
+  // ★ ここが重要：DBから3択を取得
+  const examples = await getEmotionExamples(); 
+  const options = examples.map(e => e.label); // ← クイックリプライにそのまま使う
 
-  const examples = await getEmotionExamples();
-  const exampleLines = examples.map(e => `・${e}`).join("\n");
-
-  // ★★★ ここでちゃんと message を定義する ★★★
   const message = `
-${name}さん、けみーだにゃ🐾
+${session.currentUserName}さん、けみーだにゃ🐾
 ちょっと考えてほしい場面があるにゃ。
 
 ${scene.scene_text}
 
 この場面を思い浮かべたとき、
 いちばん最初に浮かんだ気持ちを
-そのまま教えてほしいにゃ。
-
-たとえば…
-${exampleLines}
+えらんでほしいにゃ🐾
 `;
 
-  // セッション状態の更新
+  // セッション初期化
+  const session = getSession(householdId);
   session.phase = "scene_emotion";
   session.sceneId = scene.id;
 
-  await replyText(replyToken, message);
+  // ★ ここを replyText → replyQuickText に変更
+  await replyQuickText(replyToken, message, options);
 }
+
 
 
 /**
