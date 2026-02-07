@@ -4,13 +4,9 @@ import { supabase } from "./client.js";
 export async function getEmotionExamples() {
   const { data, error } = await supabase
     .from("emotion_examples")
-    .select("label")
+    .select("id, label, display_order")
     .order("display_order", { ascending: true });
 
-  if (error) {
-    console.error("emotion_examples error:", error);
-    return [];
-  }
-
-  return data.map(d => d.label);
+  if (error) throw error;
+  return data || [];
 }
