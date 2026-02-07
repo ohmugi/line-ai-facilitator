@@ -157,31 +157,31 @@ async function handleWebhookEvents(events = []) {
          * ① scene + emotion → ② 価値観／社会規範へ
          */
         case "scene_emotion": {
-          session.lastEmotionAnswer = userText;
-          session.phase = "value_norm";
+  console.log("[DEBUG] scene_emotion 入力:", userText);
 
-          await replyText(
-            replyToken,
-            `${session.currentUserName}さん、
+  // ★ 重要：クイックリプライの答えを必ず保存
+  session.lastEmotionAnswer = userText;
+
+  // ★ 重要：フェーズを“確実に”進める
+  session.phase = "value_norm";
+
+  console.log("[DEBUG] phase -> value_norm");
+
+  await replyText(
+    replyToken,
+    `${session.currentUserName}さん、
 その気持ちの裏に、どんな考えがありそうかにゃ？
 思いつく範囲で大丈夫にゃ🐾`
-          );
-          break;
-        }
-
-        /**
-         * ② 価値観／社会規範 → ③ 背景へ
-         */
-        await replyQuickText(
-  replyToken,
-  `${session.currentUserName}さん、
-いまの考えにいちばん近いものをえらんでほしいにゃ🐾`,
-  options
-);
+  );
+  break;
+}
 case "value_norm": {
+  console.log("[DEBUG] value_norm 入力:", userText);
+
   const userValueText = userText;
 
   session.phase = "value_norm_choice";
+  console.log("[DEBUG] phase -> value_norm_choice");
 
   const options = await generateValueOptions({
     emotionAnswer: session.lastEmotionAnswer,
@@ -196,6 +196,7 @@ case "value_norm": {
 
   break;
 }
+
 
 
 case "value_norm_choice": {
