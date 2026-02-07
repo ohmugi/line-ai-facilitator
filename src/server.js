@@ -25,6 +25,8 @@ import { generateDirection } from "./ai/generateDirection.js";
 import { generateReflection } from "./ai/generateReflection.js";
 import { generateValueOptions } from "./ai/generateValueOptions.js";
 import { generateBackgroundOptions } from "./ai/generateBackgroundOptions.js";
+import { generateVisionOptions } from "./ai/generateVisionOptions.js";
+
 
 
 const app = express();
@@ -207,20 +209,46 @@ case "value_norm_choice": {
   await replyQuickText(replyToken, msg, options);
   break;
 }
-          case "background_choice": {
+        case "background_choice": {
   console.log("[DEBUG] background_choice 入力:", userText);
 
-  // 選んだ背景を保存（あとで使う）
+  // 背景を保存
   session.lastBackgroundChoice = userText;
+
+  // 次は「ビジョンのクイックリプライ」
+  session.phase = "vision_choice";
+  console.log("[DEBUG] phase -> vision_choice");
+
+  // ★ ビジョンの選択肢をAIに作らせる
+  const options = await generateVisionOptions({
+    emotionAnswer: session.lastEmotionAnswer,
+    valueChoice: session.lastValueChoice,
+    backgroundChoice: session.lastBackgroundChoice,
+    sceneText: session.sceneId,
+  });
+
+  const msg = `${session.currentUserName}さん、
+この場面で、子どもにどうなってほしいか、
+もしくは、どう関わっていきたいかにいちばん近いものをえらんでほしいにゃ🐾`;
+
+  await replyQuickText(replyToken, msg, options);
+  break;
+}
+case "vision_choice": {
+  console.log("[DEBUG] vision_choice 入力:", userText);
+
+  // 選んだビジョンを保存
+  session.lastVisionChoice = userText;
 
   // 次はまとめへ
   session.phase = "reflection";
   console.log("[DEBUG] phase -> reflection");
 
   const reflection = await generateReflection({
-    backgroundText: userText,
+    backgroundText: session.lastBackgroundChoice,
     valueChoice: session.lastValueChoice,
     emotionAnswer: session.lastEmotionAnswer,
+    visionChoice: session.lastVisionChoice,
   });
 
   await saveMessage({
@@ -231,8 +259,16 @@ case "value_norm_choice": {
   });
 
   await replyText(replyToken, reflection);
+
+  // ★★★ ここでセッション完結処理 ★★★
+  session.finishedUsers.push(session.currentUserId);
+  endSession(householdId);
+
+  // TODO: もう一方の親に①を投げる処理をここに追加（後述）
   break;
 }
+
+
 
 
 
