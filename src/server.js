@@ -30,6 +30,15 @@ import { generateVisionOptions } from "./ai/generateVisionOptions.js";
 
 
 const app = express();
+function updateContext(session) {
+  session.context = {
+    sceneText: session.sceneText,
+    emotion: session.lastEmotionAnswer,
+    value: session.lastValueChoice,
+    background: session.lastBackgroundChoice,
+    vision: session.lastVisionChoice,
+  };
+}
 
 /**
  * =========================
@@ -162,17 +171,15 @@ async function handleWebhookEvents(events = []) {
 
   // 感情を保存
   session.lastEmotionAnswer = userText;
+         updateContext(session);
 
   // ★ いきなり次は「AIクイックリプライフェーズ」
   session.phase = "value_norm_choice";
   console.log("[DEBUG] phase -> value_norm_choice");
 
   // ★ ここで“質問＋選択肢”をまとめて出す
-  const options = await generateValueOptions({
-    emotionAnswer: session.lastEmotionAnswer,
-    valueText: null,          // ← まだ自由記述はない
-    sceneText: session.sceneId,
-  });
+  const options = await generateValueOptions(session.context);
+
 
   const msg = `${session.currentUserName}さん、
 その気持ちの裏に、どんな考えがありそうかにゃ？
@@ -190,6 +197,7 @@ case "value_norm_choice": {
 
   // 選んだ価値観を保存（あとで使う）
   session.lastValueChoice = userText;
+  updateContext(session);
 
   // 次は「背景のクイックリプライ」
   session.phase = "background_choice";
@@ -214,6 +222,7 @@ case "value_norm_choice": {
 
   // 背景を保存
   session.lastBackgroundChoice = userText;
+          updateContext(session);
 
   // 次は「ビジョンのクイックリプライ」
   session.phase = "vision_choice";
@@ -239,6 +248,7 @@ case "vision_choice": {
 
   // 選んだビジョンを保存
   session.lastVisionChoice = userText;
+  updateContext(session);
 
   // 次はまとめへ
   session.phase = "reflection";
@@ -339,6 +349,7 @@ async function sendSceneAndEmotion(replyToken, householdId) {
     await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
     return;
   }
+  session.sceneText = scene.scene_text;
 
   // DBからクイックリプライ用の選択肢を取得
   const examples = await getEmotionExamples();
