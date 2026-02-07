@@ -19,6 +19,8 @@ import { getEmotionExamples } from "./supabase/emotionExamples.js";
 import { getLineProfile } from "./line/getProfile.js";
 import { replyTextWithQuickReply } from "./line/reply.js";
 import { replyQuickText } from "./line/replyQuick.js";
+import { generateValueOptions } from "./ai/generateValueOptions.js";
+
 
 
 
@@ -155,6 +157,7 @@ async function handleWebhookEvents(events = []) {
          * ① scene + emotion → ② 価値観／社会規範へ
          */
         case "scene_emotion": {
+          session.lastEmotionAnswer = userText;
           session.phase = "value_norm";
 
           await replyText(
@@ -181,9 +184,9 @@ case "value_norm": {
   session.phase = "value_norm_choice";
 
   const options = await generateValueOptions({
-    emotionAnswer: session.lastEmotionAnswer, // あれば
+    emotionAnswer: session.lastEmotionAnswer,
     valueText: userValueText,
-    sceneText: session.sceneId, // 必要なら
+    sceneText: session.sceneId,
   });
 
   const msg = `${session.currentUserName}さん、
@@ -193,6 +196,7 @@ case "value_norm": {
 
   break;
 }
+
 
 case "value_norm_choice": {
   session.phase = "background";
@@ -205,6 +209,7 @@ case "value_norm_choice": {
   );
   break;
 }
+
 
 
         /**
