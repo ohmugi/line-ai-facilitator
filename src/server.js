@@ -129,10 +129,31 @@ async function handleWebhookEvents(events = []) {
       const displayName = profile?.displayName || "あなた";
 
       // セッションに必要な情報をまとめて入れる
-      const session = getSession(householdId);
-      session.currentUserId = source.userId;
-      session.currentUserName = displayName;
-      session.finishedUsers = [];
+      // ======== ★ 修正版 ★ ========
+const session = getSession(householdId);
+
+// parents 構造を初期化（なければ作る）
+if (!session.parents) {
+  session.parents = {
+    A: null,
+    B: null,
+  };
+}
+
+// まだ誰もいなければ、この人を A にする
+if (!session.parents.A) {
+  session.parents.A = {
+    userId: source.userId,
+    name: displayName,
+  };
+  console.log("[PARENTS] Aに登録:", session.parents.A);
+}
+
+// いま話している人を currentUser として保持（既存ロジックは維持）
+session.currentUserId = source.userId;
+session.currentUserName = displayName;
+session.finishedUsers = [];
+
       // ★ 追加：シーン周回用の状態
 session.usedSceneIds = [];
 session.lastCategory = null;
@@ -153,7 +174,28 @@ session.lastCategory = null;
       }
 
       const session = getSession(householdId);
-      console.log("[SESSION]", householdId, session.phase);
+console.log("[SESSION]", householdId, session.phase);
+
+// ======== ★ ここに追加 ★ ========
+// 2人目の登録（B）
+if (
+  session.parents &&
+  session.parents.A &&
+  !session.parents.B &&
+  session.parents.A.userId !== source.userId
+) {
+  // A ではない人が初めて発話した → B に登録
+  const profileB = await getLineProfile(source.userId);
+  const nameB = profileB?.displayName || "あなた";
+
+  session.parents.B = {
+    userId: source.userId,
+    name: nameB,
+  };
+
+  console.log("[PARENTS] Bに登録:", session.parents.B);
+}
+
 
       // ユーザー発話を保存
       await saveMessage({
@@ -275,6 +317,11 @@ case "vision_choice": {
 
   // ★★★ ここでセッション完結処理 ★★★
   session.finishedUsers.push(session.currentUserId);
+  // ======== ★ 追加 ★ ========
+session.finishedUsers = session.finishedUsers || [];
+session.finishedUsers.push(source.userId);
+console.log("[FINISHED]", session.finishedUsers);
+
   endSession(householdId);
 
   // TODO: もう一方の親に①を投げる処理をここに追加（後述）
