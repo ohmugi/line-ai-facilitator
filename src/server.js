@@ -475,15 +475,10 @@ async function sendSceneAndEmotion(replyToken, householdId) {
   const options = examples.map(e => e.label);
 
   const message = `
-${session.currentUserName}さん、けみーだにゃ🐾
-ちょっと考えてほしい場面があるにゃ。
+${session.currentUserName}さん、${scene.scene_text}
 
-${scene.scene_text}
-
-この場面を思い浮かべたとき、
-いちばん最初に浮かんだ気持ちを
-えらんでほしいにゃ🐾
-`;
+近いものをえらんでもいいし、
+ぴったり来なければ自由に書いてほしいにゃ🐾`;
 
   session.phase = "scene_emotion";
 
