@@ -127,7 +127,19 @@ async function handleWebhookEvents(events = []) {
       // けみーの挨拶
       await replyText(
         replyToken,
-        `はじめまして、けみーだにゃ🐾\nさっそく最初の場面を投げるにゃ。`
+        `はじめまして、けみーだにゃ🐾  
+
+けみー、いま子育て中で、毎日が楽しいんだけど、  
+同時に将来のことを考える時間が増えたにゃ。  
+
+いろんな場面を思い浮かべては、  
+「こんなとき、自分はどう感じるんだろう」  
+「その感じ方は、どこから来ているんだろう」って、  
+つい考えてばかりにゃ。  
+
+いろんなパパやママにも話を聞いてきたけど、  
+よかったらおふたりの感じ方も、少しだけ教えてほしいにゃ。
+`
       );
 
       // ======== セッション初期化（parents + turn） ========
@@ -278,7 +290,8 @@ if (
 
   const msg = `${session.currentUserName}さん、
 その気持ちの裏に、どんな考えがありそうかにゃ？
-いちばん近いものをえらんでほしいにゃ🐾`;
+近いものをえらんでもいいし、
+しっくり来なければ自由に書いてほしいにゃ🐾`;
 
   await replyQuickText(replyToken, msg, options);
   break;
@@ -307,7 +320,8 @@ case "value_norm_choice": {
 
   const msg = `${session.currentUserName}さん、
 その考えは、どんな経験から生まれたと思うかにゃ？
-いちばん近いものをえらんでほしいにゃ🐾`;
+近いものをえらんでもいいし、
+しっくり来なければ自由に書いてほしいにゃ🐾`;
 
   await replyQuickText(replyToken, msg, options);
   break;
@@ -333,7 +347,9 @@ case "value_norm_choice": {
 
   const msg = `${session.currentUserName}さん、
 この場面で、子どもにどうなってほしいか、
-もしくは、どう関わっていきたいかにいちばん近いものをえらんでほしいにゃ🐾`;
+もしくは、どう関わっていきたいかにゃ？
+近いものをえらんでもいいし、
+ぴったり来なければ自由に書いてほしいにゃ🐾`;
 
   await replyQuickText(replyToken, msg, options);
   break;
