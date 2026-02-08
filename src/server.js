@@ -113,54 +113,104 @@ async function handleWebhookEvents(events = []) {
       source.groupId || source.roomId || source.userId;
     const replyToken = event.replyToken;
 
+        /**
+     * =============================
+     * グループにけみーが追加されたとき（自動オンボーディング）
+     * =============================
+     */
+    if (event.type === "memberJoined") {
+      console.log("[ONBOARDING] memberJoined detected");
+
+      // セッション開始
+      startSession(householdId, crypto.randomUUID());
+
+      // けみーの挨拶
+      await replyText(
+        replyToken,
+        `はじめまして、けみーだにゃ🐾\nさっそく最初の場面を投げるにゃ。`
+      );
+
+      // ======== セッション初期化（parents + turn） ========
+      const session = getSession(householdId);
+
+      // parents 初期化
+      if (!session.parents) {
+        session.parents = { A: null, B: null };
+      }
+
+      // いま発火しているのは「けみー」なので、
+      // ここでは A/B はまだ確定させない（後で上書き）
+      session.parents.A = {
+        userId: "PENDING_A",
+        name: "親A（未確定）",
+      };
+      session.parents.B = {
+        userId: "PENDING_B",
+        name: "親B（未確定）",
+      };
+
+      // ★ 先攻をランダムで1回だけ決める
+      if (!session.firstSpeaker) {
+        session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
+        console.log("[TURN] firstSpeaker:", session.firstSpeaker);
+      }
+
+      // 現在のターンを設定
+      session.turn = session.firstSpeaker;
+
+      // finishedUsers 初期化
+      session.finishedUsers = [];
+
+      // ======== そのまま最初のシーンへ ========
+      await sendSceneAndEmotion(replyToken, householdId);
+
+      continue; // ここで処理を抜ける
+    }
+
+
     // =============================
     // セッション開始（postback / はじめる）
     // =============================
-    if (
-      event.type === "postback" ||
-      (event.type === "message" &&
-        event.message?.type === "text" &&
-        event.message.text.trim() === START_SIGNAL)
-    ) {
-      startSession(householdId, crypto.randomUUID());
+  if (
+  event.type === "postback" ||
+  (event.type === "message" &&
+    event.message?.type === "text" &&
+    event.message.text.trim() === START_SIGNAL)
+) {
+  console.log("[SESSION] manual start triggered");
 
-      // 名前を取得
-      const profile = await getLineProfile(source.userId);
-      const displayName = profile?.displayName || "あなた";
+  startSession(householdId, crypto.randomUUID());
 
-      // セッションに必要な情報をまとめて入れる
-      // ======== ★ 修正版 ★ ========
-const session = getSession(householdId);
+  const profile = await getLineProfile(source.userId);
+  const displayName = profile?.displayName || "あなた";
 
-// parents 構造を初期化（なければ作る）
-if (!session.parents) {
-  session.parents = {
-    A: null,
-    B: null,
-  };
-}
+  const session = getSession(householdId);
 
-// まだ誰もいなければ、この人を A にする
-if (!session.parents.A) {
+  // parents 初期化（なければ作る）
+  if (!session.parents) {
+    session.parents = { A: null, B: null };
+  }
+
+  // この人を A として登録（暫定）
   session.parents.A = {
     userId: source.userId,
     name: displayName,
   };
-  console.log("[PARENTS] Aに登録:", session.parents.A);
+
+  // 先攻をランダム決定（まだ決まっていなければ）
+  if (!session.firstSpeaker) {
+    session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
+    console.log("[TURN] firstSpeaker:", session.firstSpeaker);
+  }
+
+  session.turn = session.firstSpeaker;
+  session.currentUserId = source.userId;
+  session.currentUserName = displayName;
+  session.finishedUsers = [];
+
+  await sendSceneAndEmotion(replyToken, householdId);
+  continue;
 }
-
-// いま話している人を currentUser として保持（既存ロジックは維持）
-session.currentUserId = source.userId;
-session.currentUserName = displayName;
-session.finishedUsers = [];
-
-      // ★ 追加：シーン周回用の状態
-session.usedSceneIds = [];
-session.lastCategory = null;
-
-      await sendSceneAndEmotion(replyToken, householdId);
-      continue;
-    }
 
     // =============================
     // テキストメッセージ処理
