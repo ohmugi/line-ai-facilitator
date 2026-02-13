@@ -19,6 +19,7 @@ import { getActiveScene } from "./db/scenes.js";
 import { getEmotionExamples } from "./supabase/emotionExamples.js";
 import { getLineProfile } from "./line/getProfile.js";
 import { replyQuickText } from "./line/replyQuick.js";
+import { pushMessage } from "./line/push.js";
 import { supabase } from "./supabase/client.js";
 
 
