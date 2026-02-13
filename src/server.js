@@ -108,12 +108,17 @@ app.post(
  */
 async function handleWebhookEvents(events = []) {
   for (const event of events) {
+
+    console.log("=== EVENT RECEIVED ===");
+    console.log(JSON.stringify(event, null, 2));
+    console.log("[EVENT]", event.type);
+    console.log("EVENT TYPE:", event.type);
+
     const source = event.source;
     const householdId =
       source.groupId || source.roomId || source.userId;
     const replyToken = event.replyToken;
-    console.log("=== EVENT RECEIVED ===");
-　　console.log(JSON.stringify(event, null, 2));
+
 
 
         /**
