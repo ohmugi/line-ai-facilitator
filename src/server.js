@@ -19,6 +19,9 @@ import { getEmotionExamples } from "./supabase/emotionExamples.js";
 import { getLineProfile } from "./line/getProfile.js";
 import { replyTextWithQuickReply } from "./line/reply.js";
 import { replyQuickText } from "./line/replyQuick.js";
+import { supabase } from "./supabase/client.js";
+import { pushMessage } from "./line/push.js";
+
 
 // AI
 import { generateDirection } from "./ai/generateDirection.js";
@@ -127,6 +130,7 @@ async function handleWebhookEvents(events = []) {
      * =============================
      */
     if (event.type === "join") {
+      console.log("JOIN EVENT ENTERED");
   console.log("[ONBOARDING] join detected");
 
     
@@ -135,8 +139,8 @@ async function handleWebhookEvents(events = []) {
       startSession(householdId, crypto.randomUUID());
 
       // けみーの挨拶
-      await replyText(
-        replyToken,
+      await pushMessage(
+  householdId,
         `はじめまして、けみーだにゃ🐾  
 
 けみー、いま子育て中で、毎日が楽しいんだけど、  
@@ -185,6 +189,8 @@ async function handleWebhookEvents(events = []) {
 
       // ======== そのまま最初のシーンへ ========
       await sendSceneAndEmotion(replyToken, householdId);
+      console.log("sendSceneAndEmotion called");
+
 
       continue; // ここで処理を抜ける
     }
@@ -471,6 +477,8 @@ async function sendSceneAndEmotion(replyToken, householdId) {
 
   // ★ 変更：ランダムではなく pickNextScene を使う
   const scene = await pickNextScene(session);
+  console.log("pickNextScene called");
+
 
   if (!scene) {
     await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
