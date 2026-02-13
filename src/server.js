@@ -1,5 +1,6 @@
 // src/server.js
 console.log("SERVER FILE LOADED");
+console.log("SERVER BOOT START");
 
 import "dotenv/config";
 import express from "express";
@@ -565,6 +566,10 @@ async function pickNextScene(session) {
  * =========================
  */
 const PORT = process.env.PORT || 3000;
+console.log("ABOUT TO LISTEN");
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`server running on ${PORT}`);
+  console.log(`server running on ${PORT}`);
+
 });
