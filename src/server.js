@@ -145,7 +145,7 @@ async function handleWebhookEvents(events = []) {
 
       // けみーの挨拶
       await replyText(
-  householdId,
+  replyToken,
         `はじめまして、けみーだにゃ🐾  
 
 けみー、いま子育て中で、毎日が楽しいんだけど、  
@@ -193,7 +193,7 @@ async function handleWebhookEvents(events = []) {
       session.finishedUsers = [];
 
       // ======== そのまま最初のシーンへ ========
-      await sendSceneAndEmotion(replyToken, householdId);
+      await pushMessage(householdId);
       console.log("sendSceneAndEmotion called");
 
 
