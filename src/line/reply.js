@@ -23,20 +23,20 @@ export async function replyText(replyToken, text) {
   );
 }
 
-export async function replyTextWithQuickReply(replyToken, text, options = []) {
-  return client.replyMessage(replyToken, {
-    type: "text",
-    text,
-    quickReply: {
-      items: options.map(opt => ({
-        type: "action",
-        action: {
-          type: "message",
-          label: opt,
-          text: opt
-        }
-      }))
-    }
-  });
-}
+// export async function replyTextWithQuickReply(replyToken, text, options = []) {
+//   return client.replyMessage(replyToken, {
+   //  type: "text",
+ //    text,
+ //    quickReply: {
+ //      items: options.map(opt => ({
+ //        type: "action",
+ //        action: {
+ //          type: "message",
+ //          label: opt,
+ //          text: opt
+ //        }
+ //      }))
+ //    }
+ //  });
+// }
 
