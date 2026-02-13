@@ -112,14 +112,19 @@ async function handleWebhookEvents(events = []) {
     const householdId =
       source.groupId || source.roomId || source.userId;
     const replyToken = event.replyToken;
+    console.log("=== EVENT RECEIVED ===");
+　　console.log(JSON.stringify(event, null, 2));
+
 
         /**
      * =============================
      * グループにけみーが追加されたとき（自動オンボーディング）
      * =============================
      */
-    if (event.type === "memberJoined") {
-      console.log("[ONBOARDING] memberJoined detected");
+    if (event.type === "join") {
+  console.log("[ONBOARDING] join detected");
+
+    
 
       // セッション開始
       startSession(householdId, crypto.randomUUID());
