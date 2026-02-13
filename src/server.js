@@ -122,6 +122,11 @@ async function handleWebhookEvents(events = []) {
       source.groupId || source.roomId || source.userId;
     const replyToken = event.replyToken;
 
+    if (event.type === "memberJoined") {
+  console.log("memberJoined ignored");
+  continue;
+}
+
 
 
         /**
