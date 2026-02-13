@@ -20,7 +20,7 @@ import { getLineProfile } from "./line/getProfile.js";
 import { replyTextWithQuickReply } from "./line/reply.js";
 import { replyQuickText } from "./line/replyQuick.js";
 import { supabase } from "./supabase/client.js";
-import { pushMessage } from "./line/push.js";
+
 
 
 // AI
@@ -139,7 +139,7 @@ async function handleWebhookEvents(events = []) {
       startSession(householdId, crypto.randomUUID());
 
       // けみーの挨拶
-      await pushMessage(
+      await replyText(
   householdId,
         `はじめまして、けみーだにゃ🐾  
 
