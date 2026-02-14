@@ -6,13 +6,13 @@ export async function getActiveScene() {
     .from("scenes")
     .select("*")
     .eq("is_active", true)
-    .limit(1)
-    .single();
+    .limit(1);
 
   if (error) {
     console.error("getActiveScene error:", error);
     return null;
   }
 
-  return data;
+  return data?.[0] ?? null;
 }
+
