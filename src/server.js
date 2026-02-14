@@ -21,6 +21,8 @@ import { getLineProfile } from "./line/getProfile.js";
 import { replyQuickText } from "./line/replyQuick.js";
 import { pushMessage } from "./line/push.js";
 import { supabase } from "./supabase/client.js";
+import { pushQuickText } from "./line/pushQuick.js";
+
 
 
 
@@ -171,15 +173,8 @@ async function handleWebhookEvents(events = []) {
       }
 
       // いま発火しているのは「けみー」なので、
-      // ここでは A/B はまだ確定させない（後で上書き）
-      session.parents.A = {
-        userId: "PENDING_A",
-        name: "親A（未確定）",
-      };
-      session.parents.B = {
-        userId: "PENDING_B",
-        name: "親B（未確定）",
-      };
+      session.parents = { A: null, B: null };
+
 
       // ★ 先攻をランダムで1回だけ決める
       if (!session.firstSpeaker) {
@@ -194,7 +189,10 @@ async function handleWebhookEvents(events = []) {
       session.finishedUsers = [];
 
       // ======== そのまま最初のシーンへ ========
-      await pushMessage(householdId);
+      // joinでは「挨拶」だけ reply（今のままでOK）
+// 最初の問いは push で（replyToken不要）
+await startFirstSceneByPush(householdId);
+
       console.log("sendSceneAndEmotion called");
 
 
@@ -474,40 +472,42 @@ console.log("[FINISHED]", session.finishedUsers);
   }
 }
 /**
+ /**
  * =========================
- * scene + emotion
+ * scene + emotion（push版）
  * =========================
  */
-async function sendSceneAndEmotion(replyToken, householdId) {
+async function startFirstSceneByPush(householdId) {
   const session = getSession(householdId);
 
-  // ★ 変更：ランダムではなく pickNextScene を使う
   const scene = await pickNextScene(session);
-  console.log("pickNextScene called");
-
+  console.log("pickNextScene called (push)");
 
   if (!scene) {
-    await replyText(replyToken, "ごめんにゃ、準備中みたいにゃ🐾");
+    await pushMessage(
+      householdId,
+      "今日はまだ問いが準備できてないみたいにゃ🐾"
+    );
     return;
   }
 
-  // シーン本文を session に保存（AI用）
   session.sceneText = scene.scene_text;
+  session.phase = "scene_emotion";
 
-  // 感情の選択肢（いまのまま）
   const examples = await getEmotionExamples();
-  const options = examples.map(e => e.label);
+  const options = examples.map((e) => e.label);
 
   const message = `
-${session.currentUserName}さん、${scene.scene_text}
+${session.currentUserName}さんへ：
+
+${scene.scene_text}
 
 近いものをえらんでもいいし、
 ぴったり来なければ自由に書いてほしいにゃ🐾`;
 
-  session.phase = "scene_emotion";
-
-  await replyQuickText(replyToken, message, options);
+  await pushQuickText(householdId, message, options);
 }
+
 
 
 async function pickNextScene(session) {
