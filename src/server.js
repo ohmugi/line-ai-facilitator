@@ -126,8 +126,33 @@ async function handleWebhookEvents(events = []) {
     const replyToken = event.replyToken;
 
     if (event.type === "memberJoined") {
-  console.log("memberJoined ignored");
+  const session = getSession(householdId);
+  if (!session.parents) session.parents = { A: null, B: null };
+
+  for (const m of event.joined.members) {
+    const profile = await getLineProfile(m.userId);
+    const name = profile?.displayName || "あなた";
+
+    if (!session.parents.A) {
+      session.parents.A = { userId: m.userId, name };
+    } else if (!session.parents.B && session.parents.A.userId !== m.userId) {
+      session.parents.B = { userId: m.userId, name };
+    }
+  }
+
+  // 2人揃ったらランダムで指定して開始
+  if (session.parents.A && session.parents.B && !session.started) {
+    session.started = true;
+    const first = Math.random() < 0.5 ? session.parents.A : session.parents.B;
+    session.currentUserId = first.userId;
+    session.currentUserName = first.name;
+
+    await startFirstSceneByPushWithTarget(householdId);
+  }
+
   continue;
+}
+
 }
 
 
@@ -477,36 +502,21 @@ console.log("[FINISHED]", session.finishedUsers);
  * scene + emotion（push版）
  * =========================
  */
-async function startFirstSceneByPush(householdId) {
+async function startFirstSceneByPushWithTarget(householdId) {
   const session = getSession(householdId);
-
   const scene = await pickNextScene(session);
-  console.log("pickNextScene called (push)");
+  const examples = await getEmotionExamples();
+  const options = examples.map(e => e.label);
 
-  if (!scene) {
-    await pushMessage(
-      householdId,
-      "今日はまだ問いが準備できてないみたいにゃ🐾"
-    );
-    return;
-  }
+  const msg = `${session.currentUserName}さんへ：${scene.scene_text}
+近いものをえらんでもいいし、ぴったり来なければ自由に書いてほしいにゃ🐾`;
 
   session.sceneText = scene.scene_text;
   session.phase = "scene_emotion";
 
-  const examples = await getEmotionExamples();
-  const options = examples.map((e) => e.label);
-
-  const message = `
-${session.currentUserName}さんへ：
-
-${scene.scene_text}
-
-近いものをえらんでもいいし、
-ぴったり来なければ自由に書いてほしいにゃ🐾`;
-
-  await pushQuickText(householdId, message, options);
+  await pushQuickText(householdId, msg, options);
 }
+
 
 
 
