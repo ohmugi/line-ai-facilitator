@@ -1,7 +1,7 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export async function generateVisionOptions(context) {
@@ -32,12 +32,13 @@ ${context.background || "不明"}
 ・余計な説明はしない（選択肢だけ出す）
 `;
 
-  const res = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
+  const res = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const text = res.choices[0].message.content.trim();
+  const text = res.content[0].text.trim();
 
   const options = text
     .split("\n")

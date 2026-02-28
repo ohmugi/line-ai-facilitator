@@ -1,7 +1,7 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export async function generateBackgroundOptions(context) {
@@ -17,12 +17,12 @@ ${context.emotion || "不明"}
 ${context.value || "不明"}
 
 【あなたの役割（超重要）】
-ユーザーの過去を“当てる”必要はありません。
+ユーザーの過去を"当てる"必要はありません。
 「あり得そうな背景の例」を提示して、思い出すきっかけをつくってください。
 
 【やってほしいこと】
 この流れに沿って、
-その考えが生まれた“あり得そうな経験の例”を3つだけ短文で出してください。
+その考えが生まれた"あり得そうな経験の例"を3つだけ短文で出してください。
 
 
 
@@ -34,12 +34,13 @@ ${context.value || "不明"}
 ・余計な説明はしない（選択肢だけ出す）
 `;
 
-  const res = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
+  const res = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const text = res.choices[0].message.content.trim();
+  const text = res.content[0].text.trim();
 
   const options = text
     .split("\n")

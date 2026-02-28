@@ -1,9 +1,8 @@
 // src/ai/nextQuestion.js
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-// ★ これを追加
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 // transcript: [{role:'A'|'B'|'AI', text:string, created_at:...}, ...]
@@ -39,16 +38,14 @@ ${dialogue}
 --- ここまで ---
 `;
 
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
-    messages: [
-      { role: "system", content: system.trim() },
-      { role: "user", content: user.trim() },
-    ],
-    temperature: 0.7,
+  const resp = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 120,
+    temperature: 0.7,
+    system: system.trim(),
+    messages: [{ role: "user", content: user.trim() }],
   });
 
-  const text = resp.choices?.[0]?.message?.content?.trim() || "";
+  const text = resp.content[0]?.text?.trim() || "";
   return text || "その場面で、あなたがいちばん気になっていたのは何だった？";
 }

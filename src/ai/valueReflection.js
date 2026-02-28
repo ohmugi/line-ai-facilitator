@@ -1,5 +1,5 @@
 // src/ai/valueReflection.js
-import { openai } from "./client.js";
+import { anthropic } from "./client.js";
 
 export async function generateValueReflection({
   sceneText,
@@ -23,7 +23,7 @@ export async function generateValueReflection({
 ・すべて「〜な感じ」「〜に目が向いている感じ」という陳述文で書く
 ・ユーザーに考えさせたり、促したりしない
 ・行動、内省の方法、改善を含めない
-・いま既に向いている注意の先を“写す”だけ
+・いま既に向いている注意の先を"写す"だけ
 
 
 【話し方】
@@ -41,14 +41,13 @@ ${sceneText}
 ${emotionText}
 `;
 
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
+  const res = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 1024,
     temperature: 0.7,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userPrompt }],
   });
 
-  return res.choices[0].message.content;
+  return res.content[0].text;
 }
