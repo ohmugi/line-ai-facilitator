@@ -25,6 +25,7 @@ import { supabase } from "./supabase/client.js";
 import { pushQuickText } from "./line/pushQuick.js";
 import { handleJoin } from "./handlers/join.js";
 import { handleFollow } from "./handlers/follow.js";
+import { startFirstSceneByPush, startFirstSceneByPushWithTarget } from "./logic/startFirstSceneByPush.js";
 
 
 
