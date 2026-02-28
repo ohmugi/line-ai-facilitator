@@ -161,61 +161,25 @@ async function handleWebhookEvents(events = []) {
        * グループにけみーが追加されたとき（自動オンボーディング）
        * =============================
        */
-      if (event.type === "join") {
-        console.log("JOIN EVENT ENTERED");
-        console.log("[ONBOARDING] join detected");
+if (event.type === "join") {
+  await handleJoin({
+    event,
+    householdId,
+    replyToken,
+    startSession,
+    getSession,
+  });
 
-        // セッション開始
-        startSession(householdId, crypto.randomUUID());
+  // ★もし startFirstSceneByPush が server.js 内関数なら、ここで呼ぶ
+  // await startFirstSceneByPush(householdId);
 
-        // けみーの挨拶（joinはreplyTokenあるのでreplyでOK）
-        await replyText(
-          replyToken,
-          `はじめまして、けみーだにゃ🐾  
+  continue;
+}
 
-けみー、いま子育て中で、毎日が楽しいんだけど、  
-同時に将来のことを考える時間が増えたにゃ。  
-
-いろんな場面を思い浮かべては、  
-「こんなとき、自分はどう感じるんだろう」  
-「その感じ方は、どこから来ているんだろう」って、  
-つい考えてばかりにゃ。  
-
-いろんなパパやママにも話を聞いてきたけど、  
-よかったらおふたりの感じ方も、少しだけ教えてほしいにゃ。
-`
-        );
-
-        // ======== セッション初期化（parents + turn） ========
-        const session = getSession(householdId);
-
-        // parents 初期化
-        if (!session.parents) {
-          session.parents = { A: null, B: null };
-        }
-
-        // いま発火しているのは「けみー」なのでリセット（あなたの意図どおり）
-        session.parents = { A: null, B: null };
-
-        // ★ 先攻をランダムで1回だけ決める
-        if (!session.firstSpeaker) {
-          session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
-          console.log("[TURN] firstSpeaker:", session.firstSpeaker);
-        }
-
-        // 現在のターンを設定
-        session.turn = session.firstSpeaker;
-
-        // finishedUsers 初期化
-        session.finishedUsers = [];
-
-        // ======== そのまま最初のシーンへ ========
-        // joinでは「挨拶」だけ reply、最初の問いは push（replyToken不要）
-        await startFirstSceneByPush(householdId);
-
-        console.log("startFirstSceneByPush called");
-        continue;
-      }
+if (event.type === "follow") {
+  await handleFollow({ event, replyToken });
+  continue;
+}
 
       // =============================
       // セッション開始（postback / はじめる）
