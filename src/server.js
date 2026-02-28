@@ -430,6 +430,21 @@ if (event.type === "follow") {
  * scene + emotion（push版）
  * =========================
  */
+async function startFirstSceneByPush(householdId) {
+  const session = getSession(householdId);
+  const scene = await pickNextScene(session);
+  const examples = await getEmotionExamples();
+  const options = examples.map(e => e.label);
+
+  const msg = `${scene.scene_text}
+近いものをえらんでもいいし、ぴったり来なければ自由に書いてほしいにゃ🐾`;
+
+  session.sceneText = scene.scene_text;
+  session.phase = "scene_emotion";
+
+  await pushQuickText(householdId, msg, options);
+}
+
 async function startFirstSceneByPushWithTarget(householdId) {
   const session = getSession(householdId);
   const scene = await pickNextScene(session);
