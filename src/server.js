@@ -17,7 +17,7 @@ import {
 } from "./session/sessionManager.js";
 
 import { getActiveScene } from "./db/scenes.js";
-import { getEmotionExamples } from "./supabase/emotionExamples.js";
+import { getStep1Options } from "./supabase/step1Options.js";  // ★ 変更
 import { getLineProfile } from "./line/getProfile.js";
 import { replyQuickText } from "./line/replyQuick.js";
 import { pushMessage } from "./line/push.js";
@@ -185,46 +185,46 @@ if (event.type === "follow") {
       // =============================
       // セッション開始（postback / はじめる）
       // =============================
-      if (
-        event.type === "postback" ||
-        (event.type === "message" &&
-          event.message?.type === "text" &&
-          event.message.text.trim() === START_SIGNAL)
-      ) {
-        console.log("[SESSION] manual start triggered");
+    if (
+  event.type === "postback" ||
+  (event.type === "message" &&
+    event.message?.type === "text" &&
+    event.message.text.trim() === START_SIGNAL)
+) {
+  console.log("[SESSION] manual start triggered");
 
-        startSession(householdId, crypto.randomUUID());
+  startSession(householdId, crypto.randomUUID());
 
-        const profile = await getLineProfile(source.userId);
-        const displayName = profile?.displayName || "あなた";
+  const profile = await getLineProfile(source.userId);
+  const displayName = profile?.displayName || "あなた";
 
-        const session = getSession(householdId);
+  const session = getSession(householdId);
 
-        // parents 初期化（なければ作る）
-        if (!session.parents) {
-          session.parents = { A: null, B: null };
-        }
+  // parents 初期化(なければ作る)
+  if (!session.parents) {
+    session.parents = { A: null, B: null };
+  }
 
-        // この人を A として登録（暫定）
-        session.parents.A = {
-          userId: source.userId,
-          name: displayName,
-        };
+  // この人を A として登録(暫定)
+  session.parents.A = {
+    userId: source.userId,
+    name: displayName,
+  };
 
-        // 先攻をランダム決定（まだ決まっていなければ）
-        if (!session.firstSpeaker) {
-          session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
-          console.log("[TURN] firstSpeaker:", session.firstSpeaker);
-        }
+  // 先攻をランダム決定(まだ決まっていなければ)
+  if (!session.firstSpeaker) {
+    session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
+    console.log("[TURN] firstSpeaker:", session.firstSpeaker);
+  }
 
-        session.turn = session.firstSpeaker;
-        session.currentUserId = source.userId;
-        session.currentUserName = displayName;
-        session.finishedUsers = [];
+  session.turn = session.firstSpeaker;
+  session.currentUserId = source.userId;
+  session.currentUserName = displayName;
+  session.finishedUsers = [];  // ★ 初期化
 
-        await sendSceneAndEmotion(replyToken, householdId);
-        continue;
-      }
+  await sendSceneAndEmotion(replyToken, householdId);
+  continue;
+}
 
       // =============================
       // テキストメッセージ処理
@@ -338,39 +338,83 @@ if (event.type === "follow") {
             break;
           }
 
-          case "vision_choice": {
-            console.log("[DEBUG] vision_choice 入力:", userText);
+         case "vision_choice": {
+  console.log("[DEBUG] vision_choice 入力:", userText);
 
-            session.lastVisionChoice = userText;
-            updateContext(session);
+  session.lastVisionChoice = userText;
+  updateContext(session);
 
-            session.phase = "reflection";
-            console.log("[DEBUG] phase -> reflection");
+  session.phase = "reflection";
+  console.log("[DEBUG] phase -> reflection");
 
-            const reflection = await generateReflection({
-              backgroundText: session.lastBackgroundChoice,
-              valueChoice: session.lastValueChoice,
-              emotionAnswer: session.lastEmotionAnswer,
-              visionChoice: session.lastVisionChoice,
-            });
+  const reflection = await generateReflection({
+    backgroundText: session.lastBackgroundChoice,
+    valueChoice: session.lastValueChoice,
+    emotionAnswer: session.lastEmotionAnswer,
+    visionChoice: session.lastVisionChoice,
+  });
 
-            await saveMessage({
-              householdId,
-              role: "AI",
-              text: reflection,
-              sessionId: session.sessionId,
-            });
+  await saveMessage({
+    householdId,
+    role: "AI",
+    text: reflection,
+    sessionId: session.sessionId,
+  });
 
-            await replyText(replyToken, reflection);
+  await replyText(replyToken, reflection);
 
-            // ★★★ ここでセッション完結処理 ★★★
-            session.finishedUsers = session.finishedUsers || [];
-            session.finishedUsers.push(source.userId);
-            console.log("[FINISHED]", session.finishedUsers);
+  // ★★★ 夫婦交互ロジック ★★★
+  session.finishedUsers = session.finishedUsers || [];
+  session.finishedUsers.push(source.userId);
+  console.log("[FINISHED]", session.finishedUsers);
 
-            endSession(householdId);
-            break;
-          }
+  // 2人揃ってるかチェック
+  const parents = session.parents;
+  if (parents && parents.A && parents.B) {
+    const bothFinished = 
+      session.finishedUsers.includes(parents.A.userId) &&
+      session.finishedUsers.includes(parents.B.userId);
+
+    if (bothFinished) {
+      // ★ 両方終わったらセッション完了
+      console.log("[SESSION] 両方完了、セッション終了");
+      endSession(householdId);
+    } else {
+      // ★ まだ片方だけ → もう片方に通知
+      const nextUser = session.finishedUsers.includes(parents.A.userId)
+        ? parents.B
+        : parents.A;
+
+      console.log("[TURN] 次は", nextUser.name, "の番");
+      
+      session.currentUserId = nextUser.userId;
+      session.currentUserName = nextUser.name;
+      session.phase = "scene_emotion";
+      
+      // ★ 回答履歴をリセット(次の人用)
+      session.lastEmotionAnswer = null;
+      session.lastValueChoice = null;
+      session.lastBackgroundChoice = null;
+      session.lastVisionChoice = null;
+      
+      // ★ 同じシナリオで、次の人にpush通知
+      const options = await getStep1Options(session.sceneId);
+      const optionTexts = options.map(o => o.option_text);
+
+      const msg = `${nextUser.name}さんの番だにゃ🐾
+
+${session.sceneText}`;
+
+      await pushQuickText(householdId, msg, optionTexts);
+    }
+  } else {
+    // ★ まだ1人しか登録されてない場合は、とりあえず終了
+    console.log("[SESSION] 1人しか登録されてないため終了");
+    endSession(householdId);
+  }
+
+  break;
+}
 
           case "background": {
             const reflection = await generateReflection({
@@ -433,31 +477,41 @@ if (event.type === "follow") {
 async function startFirstSceneByPush(householdId) {
   const session = getSession(householdId);
   const scene = await pickNextScene(session);
-  const examples = await getEmotionExamples();
-  const options = examples.map(e => e.label);
+  
+  // ★ scene.id を保存
+  session.sceneId = scene.id;
+  session.sceneText = scene.scene_text;
+  
+  // ★ Step1選択肢を scene_id で取得
+  const options = await getStep1Options(scene.id);
+  const optionTexts = options.map(o => o.option_text);
 
   const msg = `${scene.scene_text}
 近いものをえらんでもいいし、ぴったり来なければ自由に書いてほしいにゃ🐾`;
 
-  session.sceneText = scene.scene_text;
   session.phase = "scene_emotion";
 
-  await pushQuickText(householdId, msg, options);
+  await pushQuickText(householdId, msg, optionTexts);
 }
 
 async function startFirstSceneByPushWithTarget(householdId) {
   const session = getSession(householdId);
   const scene = await pickNextScene(session);
-  const examples = await getEmotionExamples();
-  const options = examples.map(e => e.label);
+  
+  // ★ scene.id を保存
+  session.sceneId = scene.id;
+  session.sceneText = scene.scene_text;
+  
+  // ★ Step1選択肢を scene_id で取得
+  const options = await getStep1Options(scene.id);
+  const optionTexts = options.map(o => o.option_text);
 
   const msg = `${session.currentUserName}さんへ：${scene.scene_text}
 近いものをえらんでもいいし、ぴったり来なければ自由に書いてほしいにゃ🐾`;
 
-  session.sceneText = scene.scene_text;
   session.phase = "scene_emotion";
 
-  await pushQuickText(householdId, msg, options);
+  await pushQuickText(householdId, msg, optionTexts);
 }
 
 
