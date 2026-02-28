@@ -475,97 +475,13 @@ ${session.sceneText}`;
  * scene + emotion（push版）
  * =========================
  */
-async function startFirstSceneByPush(householdId) {
-  const session = getSession(householdId);
-  const scene = await pickNextScene(session);
-  
-  // ★ scene.id を保存
-  session.sceneId = scene.id;
-  session.sceneText = scene.scene_text;
-  
-  // ★ Step1選択肢を scene_id で取得
-  const options = await getStep1Options(scene.id);
-  const optionTexts = options.map(o => o.option_text);
-
-  const msg = `${scene.scene_text}
-近いものをえらんでもいいし、ぴったり来なければ自由に書いてほしいにゃ🐾`;
-
-  session.phase = "scene_emotion";
-
-  await pushQuickText(householdId, msg, optionTexts);
-}
-
-async function startFirstSceneByPushWithTarget(householdId) {
-  const session = getSession(householdId);
-  const scene = await pickNextScene(session);
-  
-  // ★ scene.id を保存
-  session.sceneId = scene.id;
-  session.sceneText = scene.scene_text;
-  
-  // ★ Step1選択肢を scene_id で取得
-  const options = await getStep1Options(scene.id);
-  const optionTexts = options.map(o => o.option_text);
-
-  const msg = `${session.currentUserName}さんへ：${scene.scene_text}
-近いものをえらんでもいいし、ぴったり来なければ自由に書いてほしいにゃ🐾`;
-
-  session.phase = "scene_emotion";
-
-  await pushQuickText(householdId, msg, optionTexts);
-}
 
 
 
 
-async function pickNextScene(session) {
-  // ① すべてのアクティブなシーンを取得
-  const { data: allScenes, error } = await supabase
-    .from("scenes")
-    .select("id, scene_text, category")
-    .eq("is_active", true);
 
-  if (error || !allScenes || allScenes.length === 0) {
-    throw new Error("No active scenes found");
-  }
 
-  const used = session.usedSceneIds || [];
-  const lastCat = session.lastCategory;
 
-  // ② まだ使っていないシーンだけに絞る
-  let candidates = allScenes.filter(
-    s => !used.includes(s.id)
-  );
-
-  // ③ 直前と同じカテゴリーをなるべく避ける
-  let filtered = candidates.filter(
-    s => s.category !== lastCat
-  );
-
-  // ④ もし候補がゼロなら「一周完了」→ リセットして再抽選
-  if (filtered.length === 0) {
-    console.log("[SCENE] 1周完了 → usedSceneIds をリセット");
-    session.usedSceneIds = [];
-    session.lastCategory = null;
-
-    // 再帰的にやり直し
-    return pickNextScene(session);
-  }
-
-  // ⑤ ランダムで1つ選ぶ（まんべんなく出る）
-  const next =
-    filtered[Math.floor(Math.random() * filtered.length)];
-
-  // ⑥ 履歴を更新
-  session.usedSceneIds.push(next.id);
-  session.lastCategory = next.category;
-
-  return next;
-  console.log(
-  `[SCENE] picked: ${next.id} / category=${next.category} / used=${session.usedSceneIds.length}`
-);
-
-}
 
 
 /**
