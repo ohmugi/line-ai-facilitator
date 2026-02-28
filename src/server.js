@@ -22,7 +22,6 @@ import { replyQuickText } from "./line/replyQuick.js";
 import { pushMessage } from "./line/push.js";
 import { supabase } from "./supabase/client.js";
 import { pushQuickText } from "./line/pushQuick.js";
-import { handleMessage } from "./handlers/message.js";
 import { handleJoin } from "./handlers/join.js";
 import { handleFollow } from "./handlers/follow.js";
 
