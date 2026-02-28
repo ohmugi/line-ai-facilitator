@@ -4,7 +4,7 @@ import { getStep1Options } from "../supabase/step1Options.js";
 import { pushQuickText } from "../line/pushQuick.js";
 
 /**
- * pickNextScene関数(server.jsから移動)
+ * pickNextScene関数
  */
 async function pickNextScene(session) {
   const { supabase } = await import("../supabase/client.js");
@@ -58,7 +58,9 @@ export async function startFirstSceneByPush(householdId) {
   const optionTexts = options.map(o => o.option_text);
 
   const msg = `${scene.scene_text}
-近いものをえらんでもいいし、ぴったり来なければ自由に書いてほしいにゃ🐾`;
+
+選択肢から選んでもいいし、
+自分の言葉で書いてくれてもいいにゃ🐾`;
 
   session.phase = "scene_emotion";
 
@@ -78,8 +80,12 @@ export async function startFirstSceneByPushWithTarget(householdId) {
   const options = await getStep1Options(scene.id);
   const optionTexts = options.map(o => o.option_text);
 
-  const msg = `${session.currentUserName}さんへ：${scene.scene_text}
-近いものをえらんでもいいし、ぴったり来なければ自由に書いてほしいにゃ🐾`;
+  const msg = `${session.currentUserName}さん、次はあなたの番だにゃ🐾
+
+${scene.scene_text}
+
+選択肢から選んでもいいし、
+自分の言葉で書いてくれてもいいにゃ🐾`;
 
   session.phase = "scene_emotion";
 
