@@ -82,12 +82,14 @@ export async function startFirstSceneByPushWithTarget(householdId) {
   const options = await getStep1Options(scene.id);
   const optionTexts = options.map(o => o.option_text);
 
-  const msg = `${session.currentUserName}さん、次はあなたの番だにゃ🐾
+  const msg = `お待たせしたにゃ🐾
+${session.currentUserName}さん、次はあなたの番だにゃ。
 
 ${scene.scene_text}
 
 選択肢から選んでもいいし、
 自分の言葉で書いてくれてもいいにゃ🐾`;
+```
 
   session.phase = "scene_emotion";
 
