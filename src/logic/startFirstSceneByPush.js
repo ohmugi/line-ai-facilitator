@@ -89,7 +89,6 @@ ${scene.scene_text}
 
 選択肢から選んでもいいし、
 自分の言葉で書いてくれてもいいにゃ🐾`;
-```
 
   session.phase = "scene_emotion";
 
