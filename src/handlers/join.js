@@ -9,7 +9,19 @@ export async function handleJoin({ event, householdId, replyToken, startSession,
   console.log("[ONBOARDING] join detected");
   
   startSession(householdId, crypto.randomUUID());
-  
+
+  // ★ セッション初期化は await の前に行う（memberJoined との競合を防ぐ）
+  const session = getSession(householdId);
+  session.parents = { A: null, B: null };
+
+  if (!session.firstSpeaker) {
+    session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
+    console.log("[TURN] firstSpeaker:", session.firstSpeaker);
+  }
+
+  session.turn = session.firstSpeaker;
+  session.finishedUsers = [];
+
   // ★ Step1: 自己紹介
   await replyText(
     replyToken,
@@ -33,17 +45,6 @@ export async function handleJoin({ event, householdId, replyToken, startSession,
 ふたりはどんな風に感じるか、
 教えてほしいにゃ🐾`
   );
-  
-  const session = getSession(householdId);
-  session.parents = { A: null, B: null };
-  
-  if (!session.firstSpeaker) {
-    session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
-    console.log("[TURN] firstSpeaker:", session.firstSpeaker);
-  }
-  
-  session.turn = session.firstSpeaker;
-  session.finishedUsers = [];
   
  // ★ Step2: 少し待ってから、いきなりシナリオ
 setTimeout(async () => {
