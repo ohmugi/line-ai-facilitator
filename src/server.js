@@ -30,7 +30,7 @@ import { startFirstSceneByPush, startFirstSceneByPushWithTarget } from "./logic/
 
 
 // AI
-import { generaten } from "./ai/generaten.js";
+import { generateReflection } from "./ai/generateReflection.js";
 import { generateStep2Question, generateStep2Options } from "./ai/generateStep2.js";
 import { generateStep3Question, generateStep3Options } from "./ai/generateStep3.js";
 import { generateStep4Question, generateStep4Options } from "./ai/generateStep4.js";
