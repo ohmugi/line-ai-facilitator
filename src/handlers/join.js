@@ -51,14 +51,4 @@ setTimeout(async () => {
   console.log("startFirstSceneByPush called");
 }, 3000);
 }
-```
 
----
-
-## タイミングの設計
-```
-0秒: 自己紹介(reply)
-  ↓
-3秒: 「さっそく聞いてみてもいいかにゃ?」(push)
-  ↓
-1.5秒: シナリオ提示(push)
