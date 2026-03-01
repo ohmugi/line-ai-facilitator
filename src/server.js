@@ -30,7 +30,7 @@ import { startFirstSceneByPush, startFirstSceneByPushWithTarget } from "./logic/
 
 
 // AI
-import { generateReflection } from "./ai/generateReflection.js";
+import { generaten } from "./ai/generaten.js";
 import { generateStep2Question, generateStep2Options } from "./ai/generateStep2.js";
 import { generateStep3Question, generateStep3Options } from "./ai/generateStep3.js";
 import { generateStep4Question, generateStep4Options } from "./ai/generateStep4.js";
@@ -355,15 +355,17 @@ if (event.type === "follow") {
   session.lastVisionChoice = userText;
   updateContext(session);
 
-  session.phase = "reflection";
-  console.log("[DEBUG] phase -> reflection");
+  session.phase = "n";
+  console.log("[DEBUG] phase -> n");
 
   const reflection = await generateReflection({
-    backgroundText: session.lastBackgroundChoice,
-    valueChoice: session.lastValueChoice,
-    emotionAnswer: session.lastEmotionAnswer,
-    visionChoice: session.lastVisionChoice,
-  });
+  sceneText: session.sceneText,
+  emotionAnswer: session.lastEmotionAnswer,
+  valueChoice: session.lastValueChoice,
+  backgroundChoice: session.lastBackgroundChoice,
+  visionChoice: session.lastVisionChoice,
+  userName: session.currentUserName,
+});
 
   await saveMessage({
     householdId,
