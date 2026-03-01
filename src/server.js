@@ -30,11 +30,10 @@ import { startFirstSceneByPush, startFirstSceneByPushWithTarget } from "./logic/
 
 
 // AI
-import { generateDirection } from "./ai/generateDirection.js";
 import { generateReflection } from "./ai/generateReflection.js";
-import { generateValueOptions } from "./ai/generateValueOptions.js";
-import { generateBackgroundOptions } from "./ai/generateBackgroundOptions.js";
-import { generateVisionOptions } from "./ai/generateVisionOptions.js";
+import { generateStep2Question, generateStep2Options } from "./ai/generateStep2.js";
+import { generateStep3Question, generateStep3Options } from "./ai/generateStep3.js";
+import { generateStep4Question, generateStep4Options } from "./ai/generateStep4.js";
 
 
 
@@ -270,74 +269,85 @@ if (event.type === "follow") {
         // ======== switch ========
         switch (session.phase) {
           case "scene_emotion": {
-            console.log("[DEBUG] scene_emotion 入力:", userText);
+  console.log("[DEBUG] scene_emotion 入力:", userText);
 
-            session.lastEmotionAnswer = userText;
-            updateContext(session);
+  session.lastEmotionAnswer = userText;
+  updateContext(session);
 
-            session.phase = "value_norm_choice";
-            console.log("[DEBUG] phase -> value_norm_choice");
+  session.phase = "value_norm_choice";
+  console.log("[DEBUG] phase -> value_norm_choice");
 
-            const options = await generateValueOptions(session.context);
+  // ★ Claude APIで質問と選択肢を生成
+  const question = await generateStep2Question({
+    sceneText: session.sceneText,
+    emotionAnswer: session.lastEmotionAnswer,
+    userName: session.currentUserName,
+  });
 
-            const msg = `${session.currentUserName}さん、
-その気持ちの裏に、どんな考えがありそうかにゃ？
-近いものをえらんでもいいし、
-しっくり来なければ自由に書いてほしいにゃ🐾`;
+  const options = await generateStep2Options({
+    sceneText: session.sceneText,
+    emotionAnswer: session.lastEmotionAnswer,
+  });
 
-            await replyQuickText(replyToken, msg, options);
-            break;
-          }
+  await replyQuickText(replyToken, question, options);
+  break;
+}
 
           case "value_norm_choice": {
-            console.log("[DEBUG] value_norm_choice 入力:", userText);
+  console.log("[DEBUG] value_norm_choice 入力:", userText);
 
-            session.lastValueChoice = userText;
-            updateContext(session);
+  session.lastValueChoice = userText;
+  updateContext(session);
 
-            session.phase = "background_choice";
-            console.log("[DEBUG] phase -> background_choice");
+  session.phase = "background_choice";
+  console.log("[DEBUG] phase -> background_choice");
 
-            const options = await generateBackgroundOptions({
-              emotionAnswer: session.lastEmotionAnswer,
-              valueChoice: session.lastValueChoice,
-              sceneText: session.sceneId,
-            });
+  // ★ Claude APIで質問と選択肢を生成
+  const question = await generateStep3Question({
+    sceneText: session.sceneText,
+    emotionAnswer: session.lastEmotionAnswer,
+    valueChoice: session.lastValueChoice,
+    userName: session.currentUserName,
+  });
 
-            const msg = `${session.currentUserName}さん、
-その考えは、どんな経験から生まれたと思うかにゃ？
-近いものをえらんでもいいし、
-しっくり来なければ自由に書いてほしいにゃ🐾`;
+  const options = await generateStep3Options({
+    sceneText: session.sceneText,
+    emotionAnswer: session.lastEmotionAnswer,
+    valueChoice: session.lastValueChoice,
+  });
 
-            await replyQuickText(replyToken, msg, options);
-            break;
-          }
+  await replyQuickText(replyToken, question, options);
+  break;
+}
 
-          case "background_choice": {
-            console.log("[DEBUG] background_choice 入力:", userText);
+         case "background_choice": {
+  console.log("[DEBUG] background_choice 入力:", userText);
 
-            session.lastBackgroundChoice = userText;
-            updateContext(session);
+  session.lastBackgroundChoice = userText;
+  updateContext(session);
 
-            session.phase = "vision_choice";
-            console.log("[DEBUG] phase -> vision_choice");
+  session.phase = "vision_choice";
+  console.log("[DEBUG] phase -> vision_choice");
 
-            const options = await generateVisionOptions({
-              emotionAnswer: session.lastEmotionAnswer,
-              valueChoice: session.lastValueChoice,
-              backgroundChoice: session.lastBackgroundChoice,
-              sceneText: session.sceneId,
-            });
+  // ★ Claude APIで質問と選択肢を生成
+  const question = await generateStep4Question({
+    sceneText: session.sceneText,
+    emotionAnswer: session.lastEmotionAnswer,
+    valueChoice: session.lastValueChoice,
+    backgroundChoice: session.lastBackgroundChoice,
+    userName: session.currentUserName,
+  });
 
-            const msg = `${session.currentUserName}さん、
-この場面で、子どもにどうなってほしいか、
-もしくは、どう関わっていきたいかにゃ？
-近いものをえらんでもいいし、
-ぴったり来なければ自由に書いてほしいにゃ🐾`;
+  const options = await generateStep4Options({
+    sceneText: session.sceneText,
+    emotionAnswer: session.lastEmotionAnswer,
+    valueChoice: session.lastValueChoice,
+    backgroundChoice: session.lastBackgroundChoice,
+  });
 
-            await replyQuickText(replyToken, msg, options);
-            break;
-          }
+  await replyQuickText(replyToken, question, options);
+  break;
+}
 
          case "vision_choice": {
   console.log("[DEBUG] vision_choice 入力:", userText);
