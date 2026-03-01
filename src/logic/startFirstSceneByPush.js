@@ -2,14 +2,13 @@
 import { getSession } from "../session/sessionManager.js";
 import { getStep1Options } from "../supabase/step1Options.js";
 import { pushQuickText } from "../line/pushQuick.js";
+import { supabase } from "../supabase/client.js";
 
 /**
  * pickNextScene関数
  */
 async function pickNextScene(session) {
-  const { supabase } = await import("../supabase/client.js");
-  
-  const { data: allScenes, error } = await supabase.supabase
+  const { data: allScenes, error } = await supabase
     .from("scenes")
     .select("id, scene_text, category")
     .eq("is_active", true);
