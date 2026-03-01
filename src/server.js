@@ -23,6 +23,7 @@ import { replyQuickText } from "./line/replyQuick.js";
 import { pushMessage } from "./line/push.js";
 import { supabase } from "./supabase/client.js";
 import { pushQuickText } from "./line/pushQuick.js";
+import { pushQuickMention } from "./line/pushQuickMention.js";
 import { handleJoin } from "./handlers/join.js";
 import { handleFollow } from "./handlers/follow.js";
 import { startFirstSceneByPush, startFirstSceneByPushWithTarget } from "./logic/startFirstSceneByPush.js";
@@ -410,15 +411,24 @@ if (event.type === "follow") {
       session.lastBackgroundChoice = null;
       session.lastVisionChoice = null;
       
-      // ★ 同じシナリオで、次の人にpush通知
+      // ★ 同じシナリオで、次の人にメンション付きpush通知
       const options = await getStep1Options(session.sceneId);
       const optionTexts = options.map(o => o.option_text);
 
-      const msg = `${nextUser.name}さんの番だにゃ🐾
+      const msg = `お待たせしたにゃ🐾 次はあなたの番だにゃ。
 
-${session.sceneText}`;
+${session.sceneText}
 
-      await pushQuickText(householdId, msg, optionTexts);
+選択肢から選んでもいいし、
+自分の言葉で書いてくれてもいいにゃ🐾`;
+
+      await pushQuickMention(
+        householdId,
+        msg,
+        optionTexts,
+        nextUser.userId,
+        nextUser.name
+      );
     }
   } else {
     // ★ まだ1人しか登録されてない場合は、とりあえず終了
