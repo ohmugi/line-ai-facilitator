@@ -2,6 +2,7 @@
 import { getSession } from "../session/sessionManager.js";
 import { getStep1Options } from "../supabase/step1Options.js";
 import { pushQuickText } from "../line/pushQuick.js";
+import { pushQuickMention } from "../line/pushQuickMention.js";
 import { supabase } from "../supabase/client.js";
 
 /**
@@ -65,7 +66,21 @@ ${scene.scene_text}
 
   session.phase = "scene_emotion";
 
-  await pushQuickText(householdId, msg, optionTexts);
+  // ★ メンション付きで送信
+  const firstUser = session.parents?.A || session.parents?.B;
+
+  if (firstUser) {
+    await pushQuickMention(
+      householdId,
+      msg,
+      optionTexts,
+      firstUser.userId,
+      firstUser.name
+    );
+  } else {
+    // フォールバック: メンションなし
+    await pushQuickText(householdId, msg, optionTexts);
+  }
 }
 
 /**
@@ -74,15 +89,14 @@ ${scene.scene_text}
 export async function startFirstSceneByPushWithTarget(householdId) {
   const session = getSession(householdId);
   const scene = await pickNextScene(session);
-  
+
   session.sceneId = scene.id;
   session.sceneText = scene.scene_text;
-  
+
   const options = await getStep1Options(scene.id);
   const optionTexts = options.map(o => o.option_text);
 
-  const msg = `お待たせしたにゃ🐾
-${session.currentUserName}さん、次はあなたの番だにゃ。
+  const msg = `お待たせしたにゃ🐾 次はあなたの番だにゃ。
 
 ${scene.scene_text}
 
