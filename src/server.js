@@ -135,7 +135,7 @@ async function handleWebhookEvents(events = []) {
         if (!session.parents) session.parents = { A: null, B: null };
 
         for (const m of event.joined.members) {
-          const profile = await getLineProfile(m.userId);
+          const profile = await getLineProfile(m.userId, householdId);
           const name = profile?.displayName || "あなた";
 
           if (!session.parents.A) {
@@ -196,7 +196,7 @@ if (event.type === "follow") {
 
   startSession(householdId, crypto.randomUUID());
 
-  const profile = await getLineProfile(source.userId);
+  const profile = await getLineProfile(source.userId, householdId);
   const displayName = profile?.displayName || "あなた";
 
   const session = getSession(householdId);
@@ -248,7 +248,7 @@ if (event.type === "follow") {
           !session.parents.B &&
           session.parents.A.userId !== source.userId
         ) {
-          const profileB = await getLineProfile(source.userId);
+          const profileB = await getLineProfile(source.userId, householdId);
           const nameB = profileB?.displayName || "あなた";
 
           session.parents.B = {
