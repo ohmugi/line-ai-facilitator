@@ -57,7 +57,9 @@ export async function startFirstSceneByPush(householdId) {
   const options = await getStep1Options(scene.id);
   const optionTexts = options.map(o => o.option_text);
 
-  const msg = `${scene.scene_text}
+  const msg = `じゃあ、さっそくひとつ聞いてみるにゃ🐾
+
+${scene.scene_text}
 
 選択肢から選んでもいいし、
 自分の言葉で書いてくれてもいいにゃ🐾`;
