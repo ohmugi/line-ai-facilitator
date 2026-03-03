@@ -259,6 +259,17 @@ if (event.type === "follow") {
           console.log("[PARENTS] Bに登録:", session.parents.B);
         }
 
+        // ======== 再開キーワード ========
+        if (userText === "再開") {
+          const last = session.lastBotMessage;
+          if (last) {
+            await replyQuickText(replyToken, last.text, last.options || []);
+          } else {
+            await replyText(replyToken, "もう少し待っててにゃ🐾");
+          }
+          continue;
+        }
+
         // ユーザー発話を保存
         await saveMessage({
           householdId,
@@ -297,6 +308,7 @@ if (event.type === "follow") {
     break;
   }
 
+  session.lastBotMessage = { text: question, options };
   await replyQuickText(replyToken, question, options);
   break;
 }
@@ -331,6 +343,7 @@ if (event.type === "follow") {
     break;
   }
 
+  session.lastBotMessage = { text: question, options };
   await replyQuickText(replyToken, question, options);
   break;
 }
@@ -367,6 +380,7 @@ if (event.type === "follow") {
     break;
   }
 
+  session.lastBotMessage = { text: question, options };
   await replyQuickText(replyToken, question, options);
   break;
 }
