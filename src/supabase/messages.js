@@ -8,7 +8,7 @@ export async function saveMessage({ householdId, role, text, sessionId }) {
     text,
     session_id: sessionId,
   });
-  if (error) throw error;
+  if (error) console.error("[saveMessage ERROR]", error.message, error.code, error.details);
 }
 
 export async function getSessionTranscript({ householdId, sessionId }) {

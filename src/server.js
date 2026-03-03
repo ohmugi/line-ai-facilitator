@@ -279,16 +279,23 @@ if (event.type === "follow") {
   console.log("[DEBUG] phase -> value_norm_choice");
 
   // ★ Claude APIで質問と選択肢を生成
-  const question = await generateStep2Question({
-    sceneText: session.sceneText,
-    emotionAnswer: session.lastEmotionAnswer,
-    userName: session.currentUserName,
-  });
-
-  const options = await generateStep2Options({
-    sceneText: session.sceneText,
-    emotionAnswer: session.lastEmotionAnswer,
-  });
+  let question, options;
+  try {
+    question = await generateStep2Question({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+      userName: session.currentUserName,
+    });
+    options = await generateStep2Options({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+    });
+  } catch (e) {
+    console.error("[Claude ERROR] step2:", e?.message || e);
+    await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
+    session.phase = "scene_emotion";
+    break;
+  }
 
   await replyQuickText(replyToken, question, options);
   break;
@@ -304,18 +311,25 @@ if (event.type === "follow") {
   console.log("[DEBUG] phase -> background_choice");
 
   // ★ Claude APIで質問と選択肢を生成
-  const question = await generateStep3Question({
-    sceneText: session.sceneText,
-    emotionAnswer: session.lastEmotionAnswer,
-    valueChoice: session.lastValueChoice,
-    userName: session.currentUserName,
-  });
-
-  const options = await generateStep3Options({
-    sceneText: session.sceneText,
-    emotionAnswer: session.lastEmotionAnswer,
-    valueChoice: session.lastValueChoice,
-  });
+  let question, options;
+  try {
+    question = await generateStep3Question({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+      valueChoice: session.lastValueChoice,
+      userName: session.currentUserName,
+    });
+    options = await generateStep3Options({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+      valueChoice: session.lastValueChoice,
+    });
+  } catch (e) {
+    console.error("[Claude ERROR] step3:", e?.message || e);
+    await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
+    session.phase = "value_norm_choice";
+    break;
+  }
 
   await replyQuickText(replyToken, question, options);
   break;
@@ -331,20 +345,27 @@ if (event.type === "follow") {
   console.log("[DEBUG] phase -> vision_choice");
 
   // ★ Claude APIで質問と選択肢を生成
-  const question = await generateStep4Question({
-    sceneText: session.sceneText,
-    emotionAnswer: session.lastEmotionAnswer,
-    valueChoice: session.lastValueChoice,
-    backgroundChoice: session.lastBackgroundChoice,
-    userName: session.currentUserName,
-  });
-
-  const options = await generateStep4Options({
-    sceneText: session.sceneText,
-    emotionAnswer: session.lastEmotionAnswer,
-    valueChoice: session.lastValueChoice,
-    backgroundChoice: session.lastBackgroundChoice,
-  });
+  let question, options;
+  try {
+    question = await generateStep4Question({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+      valueChoice: session.lastValueChoice,
+      backgroundChoice: session.lastBackgroundChoice,
+      userName: session.currentUserName,
+    });
+    options = await generateStep4Options({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+      valueChoice: session.lastValueChoice,
+      backgroundChoice: session.lastBackgroundChoice,
+    });
+  } catch (e) {
+    console.error("[Claude ERROR] step4:", e?.message || e);
+    await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
+    session.phase = "background_choice";
+    break;
+  }
 
   await replyQuickText(replyToken, question, options);
   break;
@@ -356,17 +377,25 @@ if (event.type === "follow") {
   session.lastVisionChoice = userText;
   updateContext(session);
 
-  session.phase = "n";
-  console.log("[DEBUG] phase -> n");
+  session.phase = "finishing";
+  console.log("[DEBUG] phase -> finishing");
 
-  const reflection = await generateReflection({
-  sceneText: session.sceneText,
-  emotionAnswer: session.lastEmotionAnswer,
-  valueChoice: session.lastValueChoice,
-  backgroundChoice: session.lastBackgroundChoice,
-  visionChoice: session.lastVisionChoice,
-  userName: session.currentUserName,
-});
+  let reflection;
+  try {
+    reflection = await generateReflection({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+      valueChoice: session.lastValueChoice,
+      backgroundChoice: session.lastBackgroundChoice,
+      visionChoice: session.lastVisionChoice,
+      userName: session.currentUserName,
+    });
+  } catch (e) {
+    console.error("[Claude ERROR] reflection:", e?.message || e);
+    await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
+    session.phase = "vision_choice";
+    break;
+  }
 
   await saveMessage({
     householdId,
@@ -486,7 +515,7 @@ ${session.sceneText}
 
       console.log("[IGNORED EVENT]", event.type);
     } catch (err) {
-      console.error("[handleWebhookEvents ERROR]", err);
+      console.error("[handleWebhookEvents ERROR]", err?.message || err?.code || String(err), err);
     }
   }
 }
