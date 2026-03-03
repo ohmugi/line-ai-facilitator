@@ -69,6 +69,9 @@ ${scene.scene_text}
   // ★ メンション付きで送信
   const firstUser = session.parents?.A || session.parents?.B;
 
+  // 次の「再開」で使えるよう最後のbot発言を保存
+  session.lastBotMessage = { text: msg, options: optionTexts };
+
   if (firstUser) {
     await pushQuickMention(
       householdId,
@@ -104,6 +107,9 @@ ${scene.scene_text}
 自分の言葉で書いてくれてもいいにゃ🐾`;
 
   session.phase = "scene_emotion";
+
+  // 次の「再開」で使えるよう最後のbot発言を保存
+  session.lastBotMessage = { text: msg, options: optionTexts };
 
   await pushQuickText(householdId, msg, optionTexts);
 }
