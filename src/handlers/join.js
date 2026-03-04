@@ -8,7 +8,7 @@ export async function handleJoin({ event, householdId, replyToken, startSession,
   console.log("JOIN EVENT ENTERED");
   console.log("[ONBOARDING] join detected");
   
-  startSession(householdId, crypto.randomUUID());
+  await startSession(householdId, crypto.randomUUID());
 
   // ★ セッション初期化は await の前に行う（memberJoined との競合を防ぐ）
   const session = getSession(householdId);

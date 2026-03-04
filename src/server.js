@@ -14,6 +14,8 @@ import {
   isSessionActive,
   getSession,
   endSession,
+  saveSession,
+  loadSessionFromDB,
 } from "./session/sessionManager.js";
 
 import { getActiveScene } from "./db/scenes.js";
@@ -194,7 +196,7 @@ if (event.type === "follow") {
 ) {
   console.log("[SESSION] manual start triggered");
 
-  startSession(householdId, crypto.randomUUID());
+  await startSession(householdId, crypto.randomUUID());
 
   const profile = await getLineProfile(source.userId, householdId);
   const displayName = profile?.displayName || "あなた";
@@ -232,6 +234,10 @@ if (event.type === "follow") {
       // =============================
       if (event.type === "message" && event.message?.type === "text") {
         const userText = event.message.text.trim();
+
+        if (!isSessionActive(householdId)) {
+          await loadSessionFromDB(householdId);
+        }
 
         if (!isSessionActive(householdId)) {
           await replyText(replyToken, "けみーは聞いてるにゃ🐾");
@@ -309,6 +315,7 @@ if (event.type === "follow") {
   }
 
   session.lastBotMessage = { text: question, options };
+  await saveSession(householdId);
   await replyQuickText(replyToken, question, options);
   break;
 }
@@ -344,6 +351,7 @@ if (event.type === "follow") {
   }
 
   session.lastBotMessage = { text: question, options };
+  await saveSession(householdId);
   await replyQuickText(replyToken, question, options);
   break;
 }
@@ -381,6 +389,7 @@ if (event.type === "follow") {
   }
 
   session.lastBotMessage = { text: question, options };
+  await saveSession(householdId);
   await replyQuickText(replyToken, question, options);
   break;
 }
@@ -435,7 +444,7 @@ if (event.type === "follow") {
     if (bothFinished) {
       // ★ 両方終わったらセッション完了
       console.log("[SESSION] 両方完了、セッション終了");
-      endSession(householdId);
+      await endSession(householdId);
     } else {
       // ★ まだ片方だけ → もう片方に通知
       const nextUser = session.finishedUsers.includes(parents.A.userId)
@@ -443,17 +452,17 @@ if (event.type === "follow") {
         : parents.A;
 
       console.log("[TURN] 次は", nextUser.name, "の番");
-      
+
       session.currentUserId = nextUser.userId;
       session.currentUserName = nextUser.name;
       session.phase = "scene_emotion";
-      
+
       // ★ 回答履歴をリセット(次の人用)
       session.lastEmotionAnswer = null;
       session.lastValueChoice = null;
       session.lastBackgroundChoice = null;
       session.lastVisionChoice = null;
-      
+
       // ★ 同じシナリオで、次の人にメンション付きpush通知
       const options = await getStep1Options(session.sceneId);
       const optionTexts = options.map(o => o.option_text);
@@ -465,6 +474,8 @@ ${session.sceneText}
 選択肢から選んでもいいし、
 自分の言葉で書いてくれてもいいにゃ🐾`;
 
+      session.lastBotMessage = { text: msg, options: optionTexts };
+      await saveSession(householdId);
       await pushQuickMention(
         householdId,
         msg,
@@ -476,7 +487,7 @@ ${session.sceneText}
   } else {
     // ★ まだ1人しか登録されてない場合は、とりあえず終了
     console.log("[SESSION] 1人しか登録されてないため終了");
-    endSession(householdId);
+    await endSession(householdId);
   }
 
   break;
@@ -513,7 +524,7 @@ ${session.sceneText}
 また別の場面でも考えてみるにゃ🐾`
             );
 
-            endSession(householdId);
+            await endSession(householdId);
             break;
           }
 
