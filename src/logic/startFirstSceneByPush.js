@@ -1,5 +1,5 @@
 // src/logic/startFirstSceneByPush.js
-import { getSession } from "../session/sessionManager.js";
+import { getSession, saveSession } from "../session/sessionManager.js";
 import { getStep1Options } from "../supabase/step1Options.js";
 import { pushQuickText } from "../line/pushQuick.js";
 import { pushQuickMention } from "../line/pushQuickMention.js";
@@ -71,6 +71,7 @@ ${scene.scene_text}
 
   // 次の「再開」で使えるよう最後のbot発言を保存
   session.lastBotMessage = { text: msg, options: optionTexts };
+  await saveSession(householdId);
 
   if (firstUser) {
     await pushQuickMention(
@@ -110,6 +111,7 @@ ${scene.scene_text}
 
   // 次の「再開」で使えるよう最後のbot発言を保存
   session.lastBotMessage = { text: msg, options: optionTexts };
+  await saveSession(householdId);
 
   await pushQuickText(householdId, msg, optionTexts);
 }
