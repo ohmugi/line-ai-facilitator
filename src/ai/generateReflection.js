@@ -10,6 +10,8 @@ export async function generateReflection({
   emotionAnswer,
   valueChoice,
   backgroundChoice,
+  backgroundDetail,
+  backgroundEmotion,
   visionChoice,
   userName,
 }) {
@@ -21,9 +23,10 @@ export async function generateReflection({
 メッセージのルール:
 - 語尾は「にゃ」を使う
 - 4-6行程度
-- 相手の感情→スクリプト→原体験→関わり方を、自然に繋げて振り返る
+- 相手の感情→スクリプト→原体験(具体的な状況と感情も含める)→関わり方を、自然に繋げて振り返る
 - 「あなたは〇〇を大事にしているんだにゃ」という肯定
 - 「それは△△という経験から来てるのかもしれないにゃ」という理解
+- backgroundDetailとbackgroundEmotionがある場合は、より具体的にエピソードと感情を織り込む
 - 「でも、子どもには××したいと思ってるんだにゃ」という未来への意思
 - 押し付けがましくなく、温かく寄り添うトーン
 - 絵文字は🐾を1回だけ、最後に使う
@@ -40,16 +43,27 @@ export async function generateReflection({
 でも、自分の子どもには、叱るんじゃなく一緒に考えたい。
 そんな風に思ってるんだにゃ🐾」`;
 
+  const contextParts = [
+    `シナリオ: ${sceneText}`,
+    `${userName}さんの気持ち: ${emotionAnswer}`,
+    `価値観・信念: ${valueChoice}`,
+    `原体験: ${backgroundChoice}`,
+  ];
+
+  if (backgroundDetail) {
+    contextParts.push(`具体的な状況: ${backgroundDetail}`);
+  }
+
+  if (backgroundEmotion) {
+    contextParts.push(`その時の感情: ${backgroundEmotion}`);
+  }
+
+  contextParts.push(`子どもとの関わり方: ${visionChoice}`);
+
   const messages = [
     {
       role: "user",
-      content: `以下の対話を振り返って、リフレクションメッセージを生成してください。
-
-シナリオ: ${sceneText}
-${userName}さんの気持ち: ${emotionAnswer}
-価値観・信念: ${valueChoice}
-原体験: ${backgroundChoice}
-子どもとの関わり方: ${visionChoice}
+      content: `${contextParts.join("\n")}
 
 リフレクションメッセージのみを出力してください。前置きや説明は不要です。`,
     },
