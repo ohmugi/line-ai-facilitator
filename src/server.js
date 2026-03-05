@@ -19,7 +19,7 @@ import {
 } from "./session/sessionManager.js";
 
 import { getActiveScene } from "./db/scenes.js";
-import { getStep1Options } from "./supabase/step1Options.js";  // ★ 変更
+import { generateStep1Options } from "./ai/generateStep1.js";
 import { getLineProfile } from "./line/getProfile.js";
 import { replyQuickText } from "./line/replyQuick.js";
 import { pushMessage } from "./line/push.js";
@@ -627,8 +627,7 @@ if (event.type === "follow") {
       session.step3Deepening = null;
 
       // ★ 同じシナリオで、次の人にメンション付きpush通知
-      const options = await getStep1Options(session.sceneId);
-      const optionTexts = options.map(o => o.option_text);
+      const optionTexts = await generateStep1Options({ sceneText: session.sceneText });
 
       const msg = `お待たせしたにゃ🐾 次はあなたの番だにゃ。
 

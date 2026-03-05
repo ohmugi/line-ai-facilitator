@@ -1,6 +1,6 @@
 // src/logic/startFirstSceneByPush.js
 import { getSession, saveSession } from "../session/sessionManager.js";
-import { getStep1Options } from "../supabase/step1Options.js";
+import { generateStep1Options } from "../ai/generateStep1.js";
 import { pushQuickText } from "../line/pushQuick.js";
 import { pushQuickMention } from "../line/pushQuickMention.js";
 import { supabase } from "../supabase/client.js";
@@ -54,8 +54,7 @@ export async function startFirstSceneByPush(householdId) {
   session.sceneId = scene.id;
   session.sceneText = scene.scene_text;
   
-  const options = await getStep1Options(scene.id);
-  const optionTexts = options.map(o => o.option_text);
+  const optionTexts = await generateStep1Options({ sceneText: scene.scene_text });
 
   const msg = `じゃあ、さっそくひとつ聞いてみるにゃ🐾
 
@@ -97,8 +96,7 @@ export async function startFirstSceneByPushWithTarget(householdId) {
   session.sceneId = scene.id;
   session.sceneText = scene.scene_text;
 
-  const options = await getStep1Options(scene.id);
-  const optionTexts = options.map(o => o.option_text);
+  const optionTexts = await generateStep1Options({ sceneText: scene.scene_text });
 
   const msg = `お待たせしたにゃ🐾 次はあなたの番だにゃ。
 
