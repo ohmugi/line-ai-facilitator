@@ -37,6 +37,12 @@ import { generateReflection } from "./ai/generateReflection.js";
 import { generateStep2Question, generateStep2Options } from "./ai/generateStep2.js";
 import { generateStep3Question, generateStep3Options } from "./ai/generateStep3.js";
 import { generateStep4Question, generateStep4Options } from "./ai/generateStep4.js";
+import {
+  generateStep3_2Question,
+  generateStep3_2Options,
+  generateStep3_3Question,
+  generateStep3_3Options,
+} from "./ai/generateStep3Deep.js";
 
 
 
@@ -362,29 +368,183 @@ if (event.type === "follow") {
   session.lastBackgroundChoice = userText;
   updateContext(session);
 
+  // Step3深掘り初期化
+  if (!session.step3Deepening) {
+    session.step3Deepening = {
+      initialAnswer: userText,
+      step3_2Answer: null,
+      step3_3Answer: null,
+      currentDeepLevel: 0,
+    };
+  }
+
+  // 「次に進みたい」が選ばれた場合、Step4へ
+  if (userText.includes("次に進みたい") || userText.includes("十分")) {
+    session.phase = "vision_choice";
+    console.log("[DEBUG] phase -> vision_choice (脱出)");
+
+    let question, options;
+    try {
+      question = await generateStep4Question({
+        sceneText: session.sceneText,
+        emotionAnswer: session.lastEmotionAnswer,
+        valueChoice: session.lastValueChoice,
+        backgroundChoice: session.lastBackgroundChoice,
+        userName: session.currentUserName,
+      });
+      options = await generateStep4Options({
+        sceneText: session.sceneText,
+        emotionAnswer: session.lastEmotionAnswer,
+        valueChoice: session.lastValueChoice,
+        backgroundChoice: session.lastBackgroundChoice,
+      });
+    } catch (e) {
+      console.error("[Claude ERROR] step4:", e?.message || e);
+      await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
+      session.phase = "background_choice";
+      break;
+    }
+
+    session.lastBotMessage = { text: question, options };
+    await saveSession(householdId);
+    await replyQuickText(replyToken, question, options);
+    break;
+  }
+
+  // Step3-2へ進む
+  session.phase = "background_choice_deep2";
+  session.step3Deepening.currentDeepLevel = 1;
+  console.log("[DEBUG] phase -> background_choice_deep2");
+
+  let question, options;
+  try {
+    question = await generateStep3_2Question({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+      valueChoice: session.lastValueChoice,
+      initialAnswer: userText,
+      userName: session.currentUserName,
+    });
+    options = await generateStep3_2Options({
+      sceneText: session.sceneText,
+      initialAnswer: userText,
+      question: question,
+    });
+  } catch (e) {
+    console.error("[Claude ERROR] step3-2:", e?.message || e);
+    await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
+    session.phase = "background_choice";
+    break;
+  }
+
+  session.lastBotMessage = { text: question, options };
+  await saveSession(householdId);
+  await replyQuickText(replyToken, question, options);
+  break;
+}
+
+         case "background_choice_deep2": {
+  console.log("[DEBUG] background_choice_deep2 入力:", userText);
+
+  session.step3Deepening.step3_2Answer = userText;
+  updateContext(session);
+
+  // 「次に進みたい」が選ばれた場合、Step4へ
+  if (userText.includes("次に進みたい") || userText.includes("十分")) {
+    session.phase = "vision_choice";
+    console.log("[DEBUG] phase -> vision_choice (脱出)");
+
+    let question, options;
+    try {
+      question = await generateStep4Question({
+        sceneText: session.sceneText,
+        emotionAnswer: session.lastEmotionAnswer,
+        valueChoice: session.lastValueChoice,
+        backgroundChoice: session.step3Deepening.initialAnswer,
+        userName: session.currentUserName,
+      });
+      options = await generateStep4Options({
+        sceneText: session.sceneText,
+        emotionAnswer: session.lastEmotionAnswer,
+        valueChoice: session.lastValueChoice,
+        backgroundChoice: session.step3Deepening.initialAnswer,
+      });
+    } catch (e) {
+      console.error("[Claude ERROR] step4:", e?.message || e);
+      await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
+      session.phase = "background_choice_deep2";
+      break;
+    }
+
+    session.lastBotMessage = { text: question, options };
+    await saveSession(householdId);
+    await replyQuickText(replyToken, question, options);
+    break;
+  }
+
+  // Step3-3へ進む
+  session.phase = "background_choice_deep3";
+  session.step3Deepening.currentDeepLevel = 2;
+  console.log("[DEBUG] phase -> background_choice_deep3");
+
+  let question, options;
+  try {
+    question = await generateStep3_3Question({
+      sceneText: session.sceneText,
+      emotionAnswer: session.lastEmotionAnswer,
+      valueChoice: session.lastValueChoice,
+      initialAnswer: session.step3Deepening.initialAnswer,
+      step3_2Answer: userText,
+      userName: session.currentUserName,
+    });
+    options = await generateStep3_3Options({
+      sceneText: session.sceneText,
+      initialAnswer: session.step3Deepening.initialAnswer,
+      step3_2Answer: userText,
+      question: question,
+    });
+  } catch (e) {
+    console.error("[Claude ERROR] step3-3:", e?.message || e);
+    await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
+    session.phase = "background_choice_deep2";
+    break;
+  }
+
+  session.lastBotMessage = { text: question, options };
+  await saveSession(householdId);
+  await replyQuickText(replyToken, question, options);
+  break;
+}
+
+         case "background_choice_deep3": {
+  console.log("[DEBUG] background_choice_deep3 入力:", userText);
+
+  session.step3Deepening.step3_3Answer = userText;
+  updateContext(session);
+
+  // Step4へ進む
   session.phase = "vision_choice";
   console.log("[DEBUG] phase -> vision_choice");
 
-  // ★ Claude APIで質問と選択肢を生成
   let question, options;
   try {
     question = await generateStep4Question({
       sceneText: session.sceneText,
       emotionAnswer: session.lastEmotionAnswer,
       valueChoice: session.lastValueChoice,
-      backgroundChoice: session.lastBackgroundChoice,
+      backgroundChoice: session.step3Deepening.initialAnswer,
       userName: session.currentUserName,
     });
     options = await generateStep4Options({
       sceneText: session.sceneText,
       emotionAnswer: session.lastEmotionAnswer,
       valueChoice: session.lastValueChoice,
-      backgroundChoice: session.lastBackgroundChoice,
+      backgroundChoice: session.step3Deepening.initialAnswer,
     });
   } catch (e) {
     console.error("[Claude ERROR] step4:", e?.message || e);
     await replyText(replyToken, "ちょっと考え中だにゃ🐾 もう一度送ってみてにゃ");
-    session.phase = "background_choice";
+    session.phase = "background_choice_deep3";
     break;
   }
 
@@ -409,7 +569,9 @@ if (event.type === "follow") {
       sceneText: session.sceneText,
       emotionAnswer: session.lastEmotionAnswer,
       valueChoice: session.lastValueChoice,
-      backgroundChoice: session.lastBackgroundChoice,
+      backgroundChoice: session.step3Deepening?.initialAnswer || session.lastBackgroundChoice,
+      backgroundDetail: session.step3Deepening?.step3_2Answer || null,
+      backgroundEmotion: session.step3Deepening?.step3_3Answer || null,
       visionChoice: session.lastVisionChoice,
       userName: session.currentUserName,
     });
@@ -462,6 +624,7 @@ if (event.type === "follow") {
       session.lastValueChoice = null;
       session.lastBackgroundChoice = null;
       session.lastVisionChoice = null;
+      session.step3Deepening = null;
 
       // ★ 同じシナリオで、次の人にメンション付きpush通知
       const options = await getStep1Options(session.sceneId);
