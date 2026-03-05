@@ -66,7 +66,13 @@ ${scene.scene_text}
   session.phase = "scene_emotion";
 
   // ★ メンション付きで送信
-  const firstUser = session.parents?.A || session.parents?.B;
+  const firstUser = session.parents?.[session.firstSpeaker]
+    || session.parents?.A
+    || session.parents?.B;
+
+  console.log("[startFirstSceneByPush] firstSpeaker:", session.firstSpeaker);
+  console.log("[startFirstSceneByPush] parents:", JSON.stringify(session.parents));
+  console.log("[startFirstSceneByPush] firstUser:", firstUser);
 
   // 次の「再開」で使えるよう最後のbot発言を保存
   session.lastBotMessage = { text: msg, options: optionTexts };
@@ -81,7 +87,7 @@ ${scene.scene_text}
       firstUser.name
     );
   } else {
-    // フォールバック: メンションなし
+    console.log("[startFirstSceneByPush] FALLBACK: no firstUser, using pushQuickText");
     await pushQuickText(householdId, msg, optionTexts);
   }
 }
