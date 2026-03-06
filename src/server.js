@@ -195,8 +195,20 @@ if (event.type === "join") {
     getSession,
   });
 
-  // ★もし startFirstSceneByPush が server.js 内関数なら、ここで呼ぶ
-  // await startFirstSceneByPush(householdId);
+  // memberJoined が並行して先に親ユーザーをセットしている場合はここで拾う
+  {
+    const session = getSession(householdId);
+    if (session?.parents?.A && session.pendingStart && !session.started) {
+      session.started = true;
+      session.pendingStart = false;
+      session.currentUserId = session.parents.A.userId;
+      session.currentUserName = session.parents.A.name;
+      console.log("[join] parents.A already set → schedule scene for", session.currentUserName);
+      setTimeout(async () => {
+        await startFirstSceneByPushWithTarget(householdId);
+      }, 3000);
+    }
+  }
 
   continue;
 }
