@@ -162,7 +162,7 @@ async function handleWebhookEvents(events = []) {
           session.currentUserName = first.name;
 
           setTimeout(async () => {
-            await startFirstSceneByPushWithTarget(householdId);
+            await startFirstSceneByPush(householdId);
           }, 3000);
 
         // 1人目が来た時点で pendingStart があればシナリオ開始を予約
@@ -174,7 +174,7 @@ async function handleWebhookEvents(events = []) {
           console.log("[memberJoined] pendingStart → schedule scene for", session.currentUserName);
 
           setTimeout(async () => {
-            await startFirstSceneByPushWithTarget(householdId);
+            await startFirstSceneByPush(householdId);
           }, 3000);
         }
 
@@ -205,7 +205,7 @@ if (event.type === "join") {
       session.currentUserName = session.parents.A.name;
       console.log("[join] parents.A already set → schedule scene for", session.currentUserName);
       setTimeout(async () => {
-        await startFirstSceneByPushWithTarget(householdId);
+        await startFirstSceneByPush(householdId);
       }, 3000);
     }
   }
