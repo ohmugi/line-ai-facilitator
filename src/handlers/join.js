@@ -46,10 +46,7 @@ export async function handleJoin({ event, householdId, replyToken, startSession,
 教えてほしいにゃ🐾`
   );
   
- // ★ Step2: 少し待ってから、いきなりシナリオ
-setTimeout(async () => {
-  await startFirstSceneByPush(householdId);
-  console.log("startFirstSceneByPush called");
-}, 3000);
+  // ★ memberJoined が userId を確定してからシナリオを送るため、フラグだけ立てる
+  session.pendingStart = true;
 }
 

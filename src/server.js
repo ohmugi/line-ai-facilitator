@@ -156,11 +156,26 @@ async function handleWebhookEvents(events = []) {
         // 2人揃ったらランダムで指定して開始
         if (session.parents.A && session.parents.B && !session.started) {
           session.started = true;
+          session.pendingStart = false;
           const first = Math.random() < 0.5 ? session.parents.A : session.parents.B;
           session.currentUserId = first.userId;
           session.currentUserName = first.name;
 
-          await startFirstSceneByPushWithTarget(householdId);
+          setTimeout(async () => {
+            await startFirstSceneByPushWithTarget(householdId);
+          }, 3000);
+
+        // 1人目が来た時点で pendingStart があればシナリオ開始を予約
+        } else if (session.parents.A && !session.parents.B && session.pendingStart && !session.started) {
+          session.started = true;
+          session.pendingStart = false;
+          session.currentUserId = session.parents.A.userId;
+          session.currentUserName = session.parents.A.name;
+          console.log("[memberJoined] pendingStart → schedule scene for", session.currentUserName);
+
+          setTimeout(async () => {
+            await startFirstSceneByPushWithTarget(householdId);
+          }, 3000);
         }
 
         continue;
