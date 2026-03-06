@@ -65,10 +65,10 @@ ${scene.scene_text}
 
   session.phase = "scene_emotion";
 
-  // ★ メンション付きで送信
-  const firstUser = session.parents?.[session.firstSpeaker]
-    || session.parents?.A
-    || session.parents?.B;
+  // currentUserId/Name を優先、なければ parents から解決
+  const firstUser = session.currentUserId && session.currentUserName
+    ? { userId: session.currentUserId, name: session.currentUserName }
+    : session.parents?.[session.firstSpeaker] || session.parents?.A || session.parents?.B;
 
   console.log("[startFirstSceneByPush] firstSpeaker:", session.firstSpeaker);
   console.log("[startFirstSceneByPush] parents:", JSON.stringify(session.parents));
