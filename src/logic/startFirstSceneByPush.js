@@ -117,5 +117,15 @@ ${scene.scene_text}
   session.lastBotMessage = { text: msg, options: optionTexts };
   await saveSession(householdId);
 
-  await pushQuickText(householdId, msg, optionTexts);
+  const targetUser = session.currentUserId && session.currentUserName
+    ? { userId: session.currentUserId, name: session.currentUserName }
+    : null;
+
+  console.log("[startFirstSceneByPushWithTarget] targetUser:", targetUser);
+
+  if (targetUser) {
+    await pushQuickMention(householdId, msg, optionTexts, targetUser.userId, targetUser.name);
+  } else {
+    await pushQuickText(householdId, msg, optionTexts);
+  }
 }
