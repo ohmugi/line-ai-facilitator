@@ -12,7 +12,8 @@ export async function handleJoin({ event, householdId, replyToken, startSession,
 
   // ★ セッション初期化は await の前に行う（memberJoined との競合を防ぐ）
   const session = getSession(householdId);
-  session.parents = { A: null, B: null };
+  // memberJoined が先に parents をセットしている場合は上書きしない
+  if (!session.parents) session.parents = { A: null, B: null };
 
   if (!session.firstSpeaker) {
     session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
