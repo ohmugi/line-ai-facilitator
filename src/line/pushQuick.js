@@ -12,7 +12,7 @@ export async function pushQuickText(to, text, options = []) {
           quickReply: {
             items: options.map((opt) => ({
               type: "action",
-              action: { type: "message", label: opt, text: opt },
+              action: { type: "message", label: opt.substring(0, 20), text: opt },
             })),
           },
         },

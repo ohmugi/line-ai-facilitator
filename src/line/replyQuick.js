@@ -13,7 +13,7 @@ export async function replyQuickText(replyToken, text, options = []) {
             type: "action",
             action: {
               type: "message",
-              label: opt,
+              label: opt.substring(0, 20),
               text: opt
             }
           }))
