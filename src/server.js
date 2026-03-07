@@ -46,7 +46,18 @@ import {
 
 
 
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
+
+// 静的ファイル（dashboard.html など）
+app.use(express.static(path.join(__dirname, "../public")));
+
+// JSON ボディパーサー（API 用）
+app.use("/api", express.json());
 function updateContext(session) {
   session.context = {
     sceneText: session.sceneText,
@@ -64,6 +75,55 @@ function updateContext(session) {
  */
 app.get("/", (_, res) => res.status(200).send("ok"));
 app.get("/health", (_, res) => res.status(200).send("ok"));
+
+/**
+ * =========================
+ * Dashboard API
+ * =========================
+ */
+app.get("/api/household", async (req, res) => {
+  const { groupId } = req.query;
+  if (!groupId) return res.status(400).json({ error: "groupId required" });
+
+  const { data, error } = await supabase
+    .from("households")
+    .select("*")
+    .eq("group_id", groupId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[household GET]", error);
+    return res.status(500).json({ error: "db error" });
+  }
+  return res.json(data);
+});
+
+app.post("/api/household", async (req, res) => {
+  const { groupId, childBirthYear, childBirthMonth } = req.body;
+  if (!groupId || !childBirthYear || !childBirthMonth) {
+    return res.status(400).json({ error: "missing fields" });
+  }
+
+  const { data, error } = await supabase
+    .from("households")
+    .upsert(
+      {
+        group_id: groupId,
+        child_birth_year: childBirthYear,
+        child_birth_month: childBirthMonth,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "group_id" }
+    )
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[household POST]", error);
+    return res.status(500).json({ error: "db error" });
+  }
+  return res.json(data);
+});
 
 /**
  * =========================

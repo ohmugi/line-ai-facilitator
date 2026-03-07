@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>けみー ダッシュボード</title>
+  <script src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", sans-serif;
+      background: #f9f5f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+      color: #333;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #4a4a4a;
+    }
+    .header p {
+      font-size: 13px;
+      color: #888;
+      margin-top: 4px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #555;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    .field {
+      margin-bottom: 16px;
+    }
+    .field label {
+      display: block;
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .field-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    select {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1.5px solid #ddd;
+      border-radius: 10px;
+      font-size: 15px;
+      background: #fafafa;
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    select:focus { border-color: #7cb9e8; }
+    .field-row span {
+      font-size: 14px;
+      color: #666;
+      white-space: nowrap;
+    }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      background: linear-gradient(135deg, #7cb9e8, #5aa3d0);
+      color: #fff;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status {
+      text-align: center;
+      font-size: 13px;
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 12px;
+      display: none;
+    }
+    .status.success { background: #e8f5e9; color: #388e3c; display: block; }
+    .status.error   { background: #fce4ec; color: #c62828; display: block; }
+    .status.loading { background: #e3f2fd; color: #1565c0; display: block; }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    .info-row strong { color: #333; }
+    #loading-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 12px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #ddd;
+      border-top-color: #7cb9e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #main-content { display: none; width: 100%; max-width: 420px; }
+    .emoji-header { font-size: 32px; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <p style="color:#888; font-size:14px;">読み込み中…</p>
+</div>
+
+<div id="main-content">
+  <div class="header">
+    <div class="emoji-header">🐾</div>
+    <h1>けみー ダッシュボード</h1>
+    <p id="user-name-display"></p>
+  </div>
+
+  <!-- グループ情報カード -->
+  <div class="card">
+    <h2>👶 お子さんの生まれ年月</h2>
+    <div class="field">
+      <label>生まれ年</label>
+      <div class="field-row">
+        <select id="birth-year"></select>
+        <span>年</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>生まれ月</label>
+      <div class="field-row">
+        <select id="birth-month"></select>
+        <span>月</span>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="save-btn" onclick="saveHousehold()">保存する</button>
+    <div class="status" id="save-status"></div>
+  </div>
+
+  <!-- 現在の設定表示カード -->
+  <div class="card" id="current-card" style="display:none">
+    <h2>📋 現在の設定</h2>
+    <div id="current-info"></div>
+  </div>
+</div>
+
+<script>
+const LIFF_ID = "2009352425-OUZXKZII";
+let groupId = null;
+
+async function initLiff() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+
+    if (!liff.isLoggedIn()) {
+      liff.login();
+      return;
+    }
+
+    const context = liff.getContext();
+    groupId = context?.groupId || null;
+
+    const profile = await liff.getProfile();
+    document.getElementById("user-name-display").textContent =
+      profile.displayName + " さん";
+
+    // 年・月のオプションを生成
+    populateYearMonth();
+
+    // 既存の設定を取得
+    if (groupId) {
+      await loadHousehold();
+    } else {
+      showStatus("save-status", "グループチャットから開いてください", "error");
+    }
+
+    document.getElementById("loading-screen").style.display = "none";
+    document.getElementById("main-content").style.display = "flex";
+    document.getElementById("main-content").style.flexDirection = "column";
+    document.getElementById("main-content").style.alignItems = "center";
+
+  } catch (err) {
+    console.error("LIFF init error:", err);
+    document.getElementById("loading-screen").innerHTML =
+      `<p style="color:#c62828; font-size:14px;">読み込みに失敗しました</p>`;
+  }
+}
+
+function populateYearMonth() {
+  const yearSel = document.getElementById("birth-year");
+  const monthSel = document.getElementById("birth-month");
+  const currentYear = new Date().getFullYear();
+
+  for (let y = currentYear; y >= currentYear - 18; y--) {
+    const opt = document.createElement("option");
+    opt.value = y;
+    opt.textContent = y;
+    yearSel.appendChild(opt);
+  }
+
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m;
+    monthSel.appendChild(opt);
+  }
+}
+
+async function loadHousehold() {
+  try {
+    const res = await fetch(`/api/household?groupId=${encodeURIComponent(groupId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data) {
+        document.getElementById("birth-year").value = data.child_birth_year;
+        document.getElementById("birth-month").value = data.child_birth_month;
+        showCurrentInfo(data);
+      }
+    }
+  } catch (err) {
+    console.error("load error:", err);
+  }
+}
+
+async function saveHousehold() {
+  if (!groupId) {
+    showStatus("save-status", "グループチャットから開いてください", "error");
+    return;
+  }
+
+  const year = parseInt(document.getElementById("birth-year").value);
+  const month = parseInt(document.getElementById("birth-month").value);
+
+  const btn = document.getElementById("save-btn");
+  btn.disabled = true;
+  showStatus("save-status", "保存中…", "loading");
+
+  try {
+    const res = await fetch("/api/household", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        groupId,
+        childBirthYear: year,
+        childBirthMonth: month,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      showStatus("save-status", "保存しました！", "success");
+      showCurrentInfo(data);
+    } else {
+      throw new Error("save failed");
+    }
+  } catch (err) {
+    showStatus("save-status", "保存に失敗しました。もう一度お試しください", "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showCurrentInfo(data) {
+  const card = document.getElementById("current-card");
+  const info = document.getElementById("current-info");
+  const age = calcAge(data.child_birth_year, data.child_birth_month);
+  info.innerHTML = `
+    <div class="info-row">
+      <span>お子さんの生まれ年月</span>
+      <strong>${data.child_birth_year}年 ${data.child_birth_month}月</strong>
+    </div>
+    <div class="info-row">
+      <span>現在の年齢</span>
+      <strong>${age}</strong>
+    </div>
+  `;
+  card.style.display = "block";
+}
+
+function calcAge(year, month) {
+  const now = new Date();
+  const birth = new Date(year, month - 1, 1);
+  let years = now.getFullYear() - birth.getFullYear();
+  let months = now.getMonth() - birth.getMonth();
+  if (months < 0) { years--; months += 12; }
+  if (years === 0) return `${months}ヶ月`;
+  if (months === 0) return `${years}歳`;
+  return `${years}歳 ${months}ヶ月`;
+}
+
+function showStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = `status ${type}`;
+}
+
+initLiff();
+</script>
+</body>
+</html>
