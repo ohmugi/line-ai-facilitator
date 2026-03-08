@@ -6,13 +6,39 @@ import { pushQuickMention } from "../line/pushQuickMention.js";
 import { supabase } from "../supabase/client.js";
 
 /**
+ * 子どもの年齢からage_groupを返す
+ */
+async function getHouseholdAgeGroup(householdId) {
+  const { data } = await supabase
+    .from("households")
+    .select("child_birth_year, child_birth_month")
+    .eq("group_id", householdId)
+    .maybeSingle();
+
+  if (!data?.child_birth_year) return "universal";
+
+  const now = new Date();
+  let age = now.getFullYear() - data.child_birth_year;
+  if (now.getMonth() + 1 < data.child_birth_month) age--;
+
+  if (age <= 5) return "toddler";
+  if (age <= 12) return "child";
+  if (age <= 18) return "teen";
+  return "universal";
+}
+
+/**
  * pickNextScene関数
  */
-async function pickNextScene(session) {
+async function pickNextScene(session, ageGroup = "universal") {
+  // 年齢に合うシナリオ + universal シナリオの両方を対象にする
+  const ageGroups = ageGroup === "universal" ? ["universal"] : [ageGroup, "universal"];
+
   const { data: allScenes, error } = await supabase
     .from("scenes")
     .select("id, scene_text, category")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .in("age_group", ageGroups);
 
   if (error || !allScenes || allScenes.length === 0) {
     throw new Error("No active scenes found");
@@ -49,7 +75,8 @@ async function pickNextScene(session) {
  */
 export async function startFirstSceneByPush(householdId) {
   const session = getSession(householdId);
-  const scene = await pickNextScene(session);
+  const ageGroup = await getHouseholdAgeGroup(householdId);
+  const scene = await pickNextScene(session, ageGroup);
   
   session.sceneId = scene.id;
   session.sceneText = scene.scene_text;
@@ -97,7 +124,8 @@ ${scene.scene_text}
  */
 export async function startFirstSceneByPushWithTarget(householdId) {
   const session = getSession(householdId);
-  const scene = await pickNextScene(session);
+  const ageGroup = await getHouseholdAgeGroup(householdId);
+  const scene = await pickNextScene(session, ageGroup);
 
   session.sceneId = scene.id;
   session.sceneText = scene.scene_text;
