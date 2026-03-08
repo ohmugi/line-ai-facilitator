@@ -128,55 +128,6 @@ app.post("/api/household", async (req, res) => {
 
 /**
  * =========================
- * Dashboard API
- * =========================
- */
-app.get("/api/household", async (req, res) => {
-  const { groupId } = req.query;
-  if (!groupId) return res.status(400).json({ error: "groupId required" });
-
-  const { data, error } = await supabase
-    .from("households")
-    .select("*")
-    .eq("group_id", groupId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[household GET]", error);
-    return res.status(500).json({ error: "db error" });
-  }
-  return res.json(data);
-});
-
-app.post("/api/household", async (req, res) => {
-  const { groupId, childBirthYear, childBirthMonth } = req.body;
-  if (!groupId || !childBirthYear || !childBirthMonth) {
-    return res.status(400).json({ error: "missing fields" });
-  }
-
-  const { data, error } = await supabase
-    .from("households")
-    .upsert(
-      {
-        group_id: groupId,
-        child_birth_year: childBirthYear,
-        child_birth_month: childBirthMonth,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "group_id" }
-    )
-    .select()
-    .single();
-
-  if (error) {
-    console.error("[household POST]", error);
-    return res.status(500).json({ error: "db error" });
-  }
-  return res.json(data);
-});
-
-/**
- * =========================
  * 定数
  * =========================
  */
@@ -331,6 +282,27 @@ if (event.type === "follow") {
       // =============================
       // セッション開始（postback / はじめる）
       // =============================
+    // =============================
+    // 生まれ年月の設定（datetimepicker）
+    // =============================
+    if (event.type === "postback" && event.postback?.data === "set_birth_date") {
+      const dateStr = event.postback.params?.date; // "YYYY-MM-DD"
+      if (dateStr) {
+        const [year, month] = dateStr.split("-").map(Number);
+        await supabase.from("households").upsert(
+          {
+            group_id: householdId,
+            child_birth_year: year,
+            child_birth_month: month,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "group_id" }
+        );
+        await replyText(replyToken, `${year}年${month}月生まれね、わかったにゃ🐾\nその子に合ったシナリオをお届けするにゃ！`);
+      }
+      continue;
+    }
+
     if (
   event.type === "postback" ||
   (event.type === "message" &&
@@ -741,9 +713,27 @@ if (event.type === "follow") {
       session.finishedUsers.includes(parents.B.userId);
 
     if (bothFinished) {
-      // ★ 両方終わったらセッション完了
-      console.log("[SESSION] 両方完了、セッション終了");
-      await endSession(householdId);
+      // ★ 両方終わった → 次のシナリオへ（永久ループ）
+      console.log("[SESSION] 両方完了 → 次のシナリオへ");
+
+      const firstFinisher = session.finishedUsers[0];
+      const nextFirst = firstFinisher === parents.A.userId ? parents.B : parents.A;
+
+      session.finishedUsers = [];
+      session.lastEmotionAnswer = null;
+      session.lastValueChoice = null;
+      session.lastBackgroundChoice = null;
+      session.lastVisionChoice = null;
+      session.step3Deepening = null;
+      session.currentUserId = nextFirst.userId;
+      session.currentUserName = nextFirst.name;
+
+      await saveSession(householdId);
+      await pushMessage(householdId, `ふたりとも答えてくれたにゃ🐾\nお互いの感じ方、どうだったにゃ？\n\n少し経ったら次のシナリオをお届けするにゃ…`);
+
+      setTimeout(async () => {
+        await startFirstSceneByPush(householdId);
+      }, 5000);
     } else {
       // ★ まだ片方だけ → もう片方に通知
       const nextUser = session.finishedUsers.includes(parents.A.userId)

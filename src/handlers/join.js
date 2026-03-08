@@ -1,6 +1,6 @@
 // src/handlers/join.js
 import crypto from "crypto";
-import { replyText } from "../line/reply.js";
+import axios from "axios";
 import { pushMessage } from "../line/push.js";
 import { startFirstSceneByPush } from "../logic/startFirstSceneByPush.js";
 
@@ -23,28 +23,57 @@ export async function handleJoin({ event, householdId, replyToken, startSession,
   session.turn = session.firstSpeaker;
   session.finishedUsers = [];
 
-  // ★ Step1: 自己紹介
-  await replyText(
-    replyToken,
-    `はじめまして、Kemy(けみー)だにゃ🐾
+  // ★ Step1: 自己紹介（datetimepicker付き）
+  const today = new Date().toISOString().split("T")[0];
+  await axios.post(
+    "https://api.line.me/v2/bot/message/reply",
+    {
+      replyToken,
+      messages: [{
+        type: "text",
+        text: `はじめまして、Kemy(けみー)だにゃ🐾
 
-わたしも子育て中の猫で、
-パートナー猫とよく意見が合わなかったんだにゃ。
+夫婦って、
+同じ場面でも感じ方が違うこと、ない?
 
-「なんでこの人、分かってくれないの?」
-って思ってたんだけど、
-ある日「なぜそう思うの?」って聞いてみたら、
-育った環境が違うだけだったんだにゃ。
+Kemyは、そんなふたりの「違い」を
+一緒に見つける猫だにゃ。
 
-それが分かったら、
-イライラが「へー、そうなんだ」に変わって、
-なんか楽になったにゃ。
+やることは簡単:
+Kemyがシナリオを出す
+→ 選択肢から選ぶ
+→ お互いの答えを見る
 
-それから、同じように悩んでる夫婦の話を
-聞くようになったんだにゃ。
+時間は1回5分くらい。
+選ぶだけだから、簡単だにゃ🐾
 
-ふたりはどんな風に感じるか、
-教えてほしいにゃ🐾`
+---
+
+お子さんの生まれ年月を教えてくれたら、
+年齢に合ったシナリオをお届けできるにゃ。
+※後からでもOKだにゃ🐾`,
+        quickReply: {
+          items: [{
+            type: "action",
+            action: {
+              type: "datetimepicker",
+              label: "📅 生まれ年月を選ぶ",
+              data: "set_birth_date",
+              mode: "date",
+              initial: "2022-01-01",
+              max: today,
+              min: "2006-01-01",
+            }
+          }]
+        }
+      }]
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      }
+    }
   );
   
   // ★ memberJoined が userId を確定してからシナリオを送るため、フラグだけ立てる
