@@ -299,6 +299,22 @@ if (event.type === "follow") {
           { onConflict: "group_id" }
         );
         await replyText(replyToken, `${year}年${month}月生まれね、わかったにゃ🐾\nその子に合ったシナリオをお届けするにゃ！`);
+
+        // 生年月設定後、自動でセッション開始
+        await startSession(householdId, crypto.randomUUID());
+        const profile = await getLineProfile(source.userId, householdId);
+        const displayName = profile?.displayName || "あなた";
+        const session = getSession(householdId);
+        if (!session.parents) session.parents = { A: null, B: null };
+        session.parents.A = { userId: source.userId, name: displayName };
+        if (!session.firstSpeaker) {
+          session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
+        }
+        session.turn = session.firstSpeaker;
+        session.currentUserId = source.userId;
+        session.currentUserName = displayName;
+        session.finishedUsers = [];
+        await startFirstSceneByPush(householdId);
       }
       continue;
     }
