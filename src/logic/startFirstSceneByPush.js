@@ -6,7 +6,18 @@ import { pushQuickMention } from "../line/pushQuickMention.js";
 import { supabase } from "../supabase/client.js";
 
 /**
- * 子どもの年齢からage_groupを返す
+ * 生年月から日本の学年を計算してage_groupを返す
+ *
+ * 日本の学年区切り：4月2日〜翌4月1日生まれが同学年
+ * birth_dayは未取得のため月で近似：
+ *   1〜3月生まれ → 入学年 = birthYear + 6
+ *   4〜12月生まれ → 入学年 = birthYear + 7
+ *
+ * grade <= 0        : toddler         (未就学)
+ * grade 1〜3        : elementary_lower (小1〜小3)
+ * grade 4〜6        : elementary_upper (小4〜小6)
+ * grade 7〜12       : teen             (中1〜高3)
+ * grade > 12        : universal
  */
 async function getHouseholdAgeGroup(householdId) {
   const { data } = await supabase
@@ -18,12 +29,20 @@ async function getHouseholdAgeGroup(householdId) {
   if (!data?.child_birth_year) return "universal";
 
   const now = new Date();
-  let age = now.getFullYear() - data.child_birth_year;
-  if (now.getMonth() + 1 < data.child_birth_month) age--;
+  const currentMonth = now.getMonth() + 1;
+  const currentSchoolYear = currentMonth >= 4 ? now.getFullYear() : now.getFullYear() - 1;
 
-  if (age <= 5) return "toddler";
-  if (age <= 12) return "child";
-  if (age <= 18) return "teen";
+  // 入学年度の計算（4月2日以降生まれを月で近似）
+  const schoolEntryYear = data.child_birth_month <= 3
+    ? data.child_birth_year + 6
+    : data.child_birth_year + 7;
+
+  const grade = currentSchoolYear - schoolEntryYear + 1;
+
+  if (grade <= 0)  return "toddler";
+  if (grade <= 3)  return "elementary_lower";
+  if (grade <= 6)  return "elementary_upper";
+  if (grade <= 12) return "teen";
   return "universal";
 }
 
