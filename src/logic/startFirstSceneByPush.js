@@ -57,7 +57,7 @@ async function pickNextScene(session, ageGroup = "universal") {
     .from("scenes")
     .select("id, scene_text, category")
     .eq("is_active", true)
-    .in("age_group", ageGroups);
+    .or(`age_group.in.(${ageGroups.join(",")}),age_group.is.null`);
 
   if (error || !allScenes || allScenes.length === 0) {
     throw new Error("No active scenes found");
