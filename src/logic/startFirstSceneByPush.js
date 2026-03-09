@@ -77,7 +77,6 @@ async function pickNextScene(session, ageGroup = "universal") {
   let filtered = candidates.filter(s => s.category !== lastCat);
 
   if (filtered.length === 0) {
-    if (scenes.length === 0) throw new Error("No active scenes found for ageGroup: " + ageGroup);
     console.log("[SCENE] 1周完了 → usedSceneIds をリセット");
     session.usedSceneIds = [];
     session.lastCategory = null;
