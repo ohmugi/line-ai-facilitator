@@ -53,11 +53,15 @@ async function pickNextScene(session, ageGroup = "universal") {
   // 年齢に合うシナリオ + universal シナリオの両方を対象にする
   const ageGroups = ageGroup === "universal" ? ["universal"] : [ageGroup, "universal"];
 
-  const { data: allScenes, error } = await supabase
+  const query = supabase
     .from("scenes")
     .select("id, scene_text, category, age_group")
-    .eq("is_active", true)
-    .in("age_group", ageGroups);
+    .eq("is_active", true);
+
+  // universal（生年月未設定）は全シーン対象、それ以外は age_group でフィルタ
+  const { data: allScenes, error } = ageGroup === "universal"
+    ? await query
+    : await query.in("age_group", ageGroups);
 
   if (error || !allScenes || allScenes.length === 0) {
     console.error("[pickNextScene] query error:", error, "count:", allScenes?.length);
@@ -73,7 +77,6 @@ async function pickNextScene(session, ageGroup = "universal") {
   let filtered = candidates.filter(s => s.category !== lastCat);
 
   if (filtered.length === 0) {
-    if (scenes.length === 0) throw new Error("No active scenes found for ageGroup: " + ageGroup);
     console.log("[SCENE] 1周完了 → usedSceneIds をリセット");
     session.usedSceneIds = [];
     session.lastCategory = null;
