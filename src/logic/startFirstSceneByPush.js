@@ -55,25 +55,33 @@ async function pickNextScene(session, ageGroup = "universal") {
 
   const { data: allScenes, error } = await supabase
     .from("scenes")
-    .select("id, scene_text, category")
-    .eq("is_active", true)
-    .or(`age_group.in.(${ageGroups.join(",")}),age_group.is.null`);
+    .select("id, scene_text, category, age_group")
+    .eq("is_active", true);
 
   if (error || !allScenes || allScenes.length === 0) {
+    console.error("[pickNextScene] query error:", error, "count:", allScenes?.length);
     throw new Error("No active scenes found");
   }
+
+  // age_group フィルタ（NULL は universal 扱い）
+  const scenes = allScenes.filter(s =>
+    ageGroups.includes(s.age_group) || s.age_group == null
+  );
+
+  console.log(`[pickNextScene] ageGroup=${ageGroup}, total=${allScenes.length}, filtered=${scenes.length}`);
 
   const used = session.usedSceneIds || [];
   const lastCat = session.lastCategory;
 
-  let candidates = allScenes.filter(s => !used.includes(s.id));
+  let candidates = scenes.filter(s => !used.includes(s.id));
   let filtered = candidates.filter(s => s.category !== lastCat);
 
   if (filtered.length === 0) {
+    if (scenes.length === 0) throw new Error("No active scenes found for ageGroup: " + ageGroup);
     console.log("[SCENE] 1周完了 → usedSceneIds をリセット");
     session.usedSceneIds = [];
     session.lastCategory = null;
-    return pickNextScene(session);
+    return pickNextScene(session, ageGroup);
   }
 
   const next = filtered[Math.floor(Math.random() * filtered.length)];
