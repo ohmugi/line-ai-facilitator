@@ -403,6 +403,19 @@ if (event.type === "follow") {
             await replyQuickText(replyToken, last.text, last.options || []);
           } else if (!session.phase) {
             // セッションが中途半端な状態（シーン未送信）→ 最初のシーンを送り直す
+            // parents/firstSpeakerが失われている場合は現在のユーザーで再設定
+            if (!session.parents?.A) {
+              const profile = await getLineProfile(source.userId, householdId);
+              const displayName = profile?.displayName || "あなた";
+              if (!session.parents) session.parents = { A: null, B: null };
+              session.parents.A = { userId: source.userId, name: displayName };
+              session.firstSpeaker = "A";
+              session.turn = "A";
+              session.currentUserId = source.userId;
+              session.currentUserName = displayName;
+              session.finishedUsers = [];
+              console.log("[再開] parents再設定:", session.parents.A);
+            }
             console.log("[再開] phase未設定のためstartFirstSceneByPushで再送");
             await replyText(replyToken, "少し待っててにゃ🐾 シナリオを届けるにゃ！");
             await startFirstSceneByPush(householdId);
