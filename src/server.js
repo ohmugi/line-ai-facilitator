@@ -356,7 +356,7 @@ if (event.type === "follow") {
   session.currentUserName = displayName;
   session.finishedUsers = [];  // ★ 初期化
 
-  await sendSceneAndEmotion(replyToken, householdId);
+  await startFirstSceneByPush(householdId);
   continue;
 }
 
