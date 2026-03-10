@@ -401,6 +401,11 @@ if (event.type === "follow") {
           const last = session.lastBotMessage;
           if (last) {
             await replyQuickText(replyToken, last.text, last.options || []);
+          } else if (!session.phase) {
+            // セッションが中途半端な状態（シーン未送信）→ 最初のシーンを送り直す
+            console.log("[再開] phase未設定のためstartFirstSceneByPushで再送");
+            await replyText(replyToken, "少し待っててにゃ🐾 シナリオを届けるにゃ！");
+            await startFirstSceneByPush(householdId);
           } else {
             await replyText(replyToken, "もう少し待っててにゃ🐾");
           }
