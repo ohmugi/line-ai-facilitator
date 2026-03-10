@@ -399,6 +399,7 @@ if (event.type === "follow") {
         // ======== 再開キーワード ========
         if (userText === "再開") {
           const last = session.lastBotMessage;
+          console.log("[再開] last:", !!last, "currentUserId:", session.currentUserId, "currentUserName:", session.currentUserName);
           if (last) {
             let mentionUserId = last.targetUserId || session.currentUserId;
             let mentionName = last.targetUserName || session.currentUserName;
