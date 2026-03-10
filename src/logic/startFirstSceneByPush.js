@@ -127,8 +127,13 @@ ${scene.scene_text}
   console.log("[startFirstSceneByPush] parents:", JSON.stringify(session.parents));
   console.log("[startFirstSceneByPush] firstUser:", firstUser);
 
-  // 次の「再開」で使えるよう最後のbot発言を保存
-  session.lastBotMessage = { text: msg, options: optionTexts };
+  // 次の「再開」で使えるよう最後のbot発言を保存（送信先も記録）
+  session.lastBotMessage = {
+    text: msg,
+    options: optionTexts,
+    targetUserId: firstUser?.userId || null,
+    targetUserName: firstUser?.name || null,
+  };
   await saveSession(householdId);
 
   if (firstUser) {
@@ -167,13 +172,18 @@ ${scene.scene_text}
 
   session.phase = "scene_emotion";
 
-  // 次の「再開」で使えるよう最後のbot発言を保存
-  session.lastBotMessage = { text: msg, options: optionTexts };
-  await saveSession(householdId);
-
   const targetUser = session.currentUserId && session.currentUserName
     ? { userId: session.currentUserId, name: session.currentUserName }
     : null;
+
+  // 次の「再開」で使えるよう最後のbot発言を保存（送信先も記録）
+  session.lastBotMessage = {
+    text: msg,
+    options: optionTexts,
+    targetUserId: targetUser?.userId || null,
+    targetUserName: targetUser?.name || null,
+  };
+  await saveSession(householdId);
 
   console.log("[startFirstSceneByPushWithTarget] targetUser:", targetUser);
 
