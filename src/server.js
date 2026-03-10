@@ -464,7 +464,7 @@ if (event.type === "follow") {
     question = await generateStep2Question({
       sceneText: session.sceneText,
       emotionAnswer: session.lastEmotionAnswer,
-      userName: session.currentUserName,
+      userName: session.currentUserName || "あなた",
     });
     options = await generateStep2Options({
       sceneText: session.sceneText,
@@ -499,7 +499,7 @@ if (event.type === "follow") {
       sceneText: session.sceneText,
       emotionAnswer: session.lastEmotionAnswer,
       valueChoice: session.lastValueChoice,
-      userName: session.currentUserName,
+      userName: session.currentUserName || "あなた",
     });
     options = await generateStep3Options({
       sceneText: session.sceneText,
@@ -547,7 +547,7 @@ if (event.type === "follow") {
         emotionAnswer: session.lastEmotionAnswer,
         valueChoice: session.lastValueChoice,
         backgroundChoice: session.lastBackgroundChoice,
-        userName: session.currentUserName,
+        userName: session.currentUserName || "あなた",
       });
       options = await generateStep4Options({
         sceneText: session.sceneText,
@@ -580,7 +580,7 @@ if (event.type === "follow") {
       emotionAnswer: session.lastEmotionAnswer,
       valueChoice: session.lastValueChoice,
       initialAnswer: userText,
-      userName: session.currentUserName,
+      userName: session.currentUserName || "あなた",
     });
     options = await generateStep3_2Options({
       sceneText: session.sceneText,
@@ -618,7 +618,7 @@ if (event.type === "follow") {
         emotionAnswer: session.lastEmotionAnswer,
         valueChoice: session.lastValueChoice,
         backgroundChoice: session.step3Deepening.initialAnswer,
-        userName: session.currentUserName,
+        userName: session.currentUserName || "あなた",
       });
       options = await generateStep4Options({
         sceneText: session.sceneText,
@@ -652,7 +652,7 @@ if (event.type === "follow") {
       valueChoice: session.lastValueChoice,
       initialAnswer: session.step3Deepening.initialAnswer,
       step3_2Answer: userText,
-      userName: session.currentUserName,
+      userName: session.currentUserName || "あなた",
     });
     options = await generateStep3_3Options({
       sceneText: session.sceneText,
@@ -690,7 +690,7 @@ if (event.type === "follow") {
       emotionAnswer: session.lastEmotionAnswer,
       valueChoice: session.lastValueChoice,
       backgroundChoice: session.step3Deepening.initialAnswer,
-      userName: session.currentUserName,
+      userName: session.currentUserName || "あなた",
     });
     options = await generateStep4Options({
       sceneText: session.sceneText,
@@ -730,7 +730,7 @@ if (event.type === "follow") {
       backgroundDetail: session.step3Deepening?.step3_2Answer || null,
       backgroundEmotion: session.step3Deepening?.step3_3Answer || null,
       visionChoice: session.lastVisionChoice,
-      userName: session.currentUserName,
+      userName: session.currentUserName || "あなた",
     });
   } catch (e) {
     console.error("[Claude ERROR] reflection:", e?.message || e);
