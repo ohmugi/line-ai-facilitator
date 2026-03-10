@@ -400,7 +400,17 @@ if (event.type === "follow") {
         if (userText === "再開") {
           const last = session.lastBotMessage;
           if (last) {
-            await replyQuickText(replyToken, last.text, last.options || []);
+            if (session.currentUserId && session.currentUserName) {
+              await pushQuickMention(
+                householdId,
+                last.text,
+                last.options || [],
+                session.currentUserId,
+                session.currentUserName
+              );
+            } else {
+              await replyQuickText(replyToken, last.text, last.options || []);
+            }
           } else if (!session.phase) {
             // セッションが中途半端な状態（シーン未送信）→ 最初のシーンを送り直す
             // parents/firstSpeakerが失われている場合は現在のユーザーで再設定
