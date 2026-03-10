@@ -790,9 +790,29 @@ ${session.sceneText}
       );
     }
   } else {
-    // ★ まだ1人しか登録されてない場合は、とりあえず終了
-    console.log("[SESSION] 1人しか登録されてないため終了");
-    await endSession(householdId);
+    // ★ parents.B 未登録 → セッションを継続し、もう一人に回答を促す
+    console.log("[SESSION] parents.B 未登録 → 2人目の参加を待つ");
+
+    // 回答履歴をリセット（2人目が答えられるよう）
+    session.lastEmotionAnswer = null;
+    session.lastValueChoice = null;
+    session.lastBackgroundChoice = null;
+    session.lastVisionChoice = null;
+    session.step3Deepening = null;
+    session.phase = "scene_emotion";
+
+    const optionTexts = await generateStep1Options({ sceneText: session.sceneText });
+
+    const msg = `ありがとうにゃ🐾 もう一人もぜひ答えてほしいにゃ！
+
+${session.sceneText}
+
+選択肢から選んでもいいし、
+自分の言葉で書いてくれてもいいにゃ🐾`;
+
+    session.lastBotMessage = { text: msg, options: optionTexts };
+    await saveSession(householdId);
+    await pushQuickText(householdId, msg, optionTexts);
   }
 
   break;
