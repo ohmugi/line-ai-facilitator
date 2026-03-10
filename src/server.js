@@ -401,17 +401,20 @@ if (event.type === "follow") {
           const last = session.lastBotMessage;
           console.log("[再開] last:", !!last, "currentUserId:", session.currentUserId, "currentUserName:", session.currentUserName);
           if (last) {
-            if (session.currentUserId && session.currentUserName) {
-              await pushQuickMention(
-                householdId,
-                last.text,
-                last.options || [],
-                session.currentUserId,
-                session.currentUserName
-              );
-            } else {
-              await replyQuickText(replyToken, last.text, last.options || []);
+            let mentionUserId = last.targetUserId || session.currentUserId;
+            let mentionName = last.targetUserName || session.currentUserName;
+            if (!mentionUserId || !mentionName) {
+              const profile = await getLineProfile(source.userId, householdId);
+              mentionUserId = source.userId;
+              mentionName = profile?.displayName || "あなた";
             }
+            await pushQuickMention(
+              householdId,
+              last.text,
+              last.options || [],
+              mentionUserId,
+              mentionName
+            );
           } else if (!session.phase) {
             // セッションが中途半端な状態（シーン未送信）→ 最初のシーンを送り直す
             // parents/firstSpeakerが失われている場合は現在のユーザーで再設定
@@ -474,7 +477,7 @@ if (event.type === "follow") {
     break;
   }
 
-  session.lastBotMessage = { text: question, options };
+  session.lastBotMessage = { text: question, options, targetUserId: session.currentUserId || null, targetUserName: session.currentUserName || null };
   await saveSession(householdId);
   await replyQuickText(replyToken, question, options);
   break;
@@ -510,7 +513,7 @@ if (event.type === "follow") {
     break;
   }
 
-  session.lastBotMessage = { text: question, options };
+  session.lastBotMessage = { text: question, options, targetUserId: session.currentUserId || null, targetUserName: session.currentUserName || null };
   await saveSession(householdId);
   await replyQuickText(replyToken, question, options);
   break;
@@ -559,7 +562,7 @@ if (event.type === "follow") {
       break;
     }
 
-    session.lastBotMessage = { text: question, options };
+    session.lastBotMessage = { text: question, options, targetUserId: session.currentUserId || null, targetUserName: session.currentUserName || null };
     await saveSession(householdId);
     await replyQuickText(replyToken, question, options);
     break;
@@ -591,7 +594,7 @@ if (event.type === "follow") {
     break;
   }
 
-  session.lastBotMessage = { text: question, options };
+  session.lastBotMessage = { text: question, options, targetUserId: session.currentUserId || null, targetUserName: session.currentUserName || null };
   await saveSession(householdId);
   await replyQuickText(replyToken, question, options);
   break;
@@ -630,7 +633,7 @@ if (event.type === "follow") {
       break;
     }
 
-    session.lastBotMessage = { text: question, options };
+    session.lastBotMessage = { text: question, options, targetUserId: session.currentUserId || null, targetUserName: session.currentUserName || null };
     await saveSession(householdId);
     await replyQuickText(replyToken, question, options);
     break;
@@ -664,7 +667,7 @@ if (event.type === "follow") {
     break;
   }
 
-  session.lastBotMessage = { text: question, options };
+  session.lastBotMessage = { text: question, options, targetUserId: session.currentUserId || null, targetUserName: session.currentUserName || null };
   await saveSession(householdId);
   await replyQuickText(replyToken, question, options);
   break;
@@ -702,7 +705,7 @@ if (event.type === "follow") {
     break;
   }
 
-  session.lastBotMessage = { text: question, options };
+  session.lastBotMessage = { text: question, options, targetUserId: session.currentUserId || null, targetUserName: session.currentUserName || null };
   await saveSession(householdId);
   await replyQuickText(replyToken, question, options);
   break;
@@ -808,7 +811,7 @@ ${session.sceneText}
 選択肢から選んでもいいし、
 自分の言葉で書いてくれてもいいにゃ🐾`;
 
-      session.lastBotMessage = { text: msg, options: optionTexts };
+      session.lastBotMessage = { text: msg, options: optionTexts, targetUserId: nextUser.userId, targetUserName: nextUser.name };
       await saveSession(householdId);
       await pushQuickMention(
         householdId,
