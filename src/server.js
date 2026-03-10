@@ -399,19 +399,21 @@ if (event.type === "follow") {
         // ======== 再開キーワード ========
         if (userText === "再開") {
           const last = session.lastBotMessage;
-          console.log("[再開] last:", !!last, "currentUserId:", session.currentUserId, "currentUserName:", session.currentUserName);
           if (last) {
-            if (session.currentUserId && session.currentUserName) {
-              await pushQuickMention(
-                householdId,
-                last.text,
-                last.options || [],
-                session.currentUserId,
-                session.currentUserName
-              );
-            } else {
-              await replyQuickText(replyToken, last.text, last.options || []);
+            let mentionUserId = session.currentUserId;
+            let mentionName = session.currentUserName;
+            if (!mentionUserId || !mentionName) {
+              const profile = await getLineProfile(source.userId, householdId);
+              mentionUserId = source.userId;
+              mentionName = profile?.displayName || "あなた";
             }
+            await pushQuickMention(
+              householdId,
+              last.text,
+              last.options || [],
+              mentionUserId,
+              mentionName
+            );
           } else if (!session.phase) {
             // セッションが中途半端な状態（シーン未送信）→ 最初のシーンを送り直す
             // parents/firstSpeakerが失われている場合は現在のユーザーで再設定
