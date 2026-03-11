@@ -214,29 +214,50 @@ async function handleWebhookEvents(events = []) {
           }
         }
 
-        // 2人揃ったらランダムで指定して開始
+        // 2人揃ったら生年月が登録済みの場合のみシナリオ開始
         if (session.parents.A && session.parents.B && !session.started) {
-          session.started = true;
-          session.pendingStart = false;
-          const first = Math.random() < 0.5 ? session.parents.A : session.parents.B;
-          session.currentUserId = first.userId;
-          session.currentUserName = first.name;
+          const { data: hh } = await supabase
+            .from("households")
+            .select("child_birth_year")
+            .eq("group_id", householdId)
+            .maybeSingle();
 
-          setTimeout(async () => {
-            await startFirstSceneByPush(householdId);
-          }, 3000);
+          if (!hh?.child_birth_year) {
+            // 生年月未登録 → 親は保持したまま待機（set_birth_date時に起動）
+            console.log("[memberJoined] birth date not set → waiting for registration");
+          } else {
+            session.started = true;
+            session.pendingStart = false;
+            const first = Math.random() < 0.5 ? session.parents.A : session.parents.B;
+            session.currentUserId = first.userId;
+            session.currentUserName = first.name;
 
-        // 1人目が来た時点で pendingStart があればシナリオ開始を予約
+            setTimeout(async () => {
+              await startFirstSceneByPush(householdId);
+            }, 3000);
+          }
+
+        // 1人目が来た時点で pendingStart があれば生年月登録済みの場合のみ予約
         } else if (session.parents.A && !session.parents.B && session.pendingStart && !session.started) {
-          session.started = true;
-          session.pendingStart = false;
-          session.currentUserId = session.parents.A.userId;
-          session.currentUserName = session.parents.A.name;
-          console.log("[memberJoined] pendingStart → schedule scene for", session.currentUserName);
+          const { data: hh } = await supabase
+            .from("households")
+            .select("child_birth_year")
+            .eq("group_id", householdId)
+            .maybeSingle();
 
-          setTimeout(async () => {
-            await startFirstSceneByPush(householdId);
-          }, 3000);
+          if (!hh?.child_birth_year) {
+            console.log("[memberJoined] birth date not set → waiting for registration");
+          } else {
+            session.started = true;
+            session.pendingStart = false;
+            session.currentUserId = session.parents.A.userId;
+            session.currentUserName = session.parents.A.name;
+            console.log("[memberJoined] pendingStart → schedule scene for", session.currentUserName);
+
+            setTimeout(async () => {
+              await startFirstSceneByPush(householdId);
+            }, 3000);
+          }
         }
 
         continue;
@@ -256,18 +277,29 @@ if (event.type === "join") {
     getSession,
   });
 
-  // memberJoined が並行して先に親ユーザーをセットしている場合はここで拾う
+  // memberJoined が並行して先に親ユーザーをセットしている場合でも、
+  // 生年月が登録されるまでシナリオは起動しない（set_birth_date で起動）
   {
     const session = getSession(householdId);
     if (session?.parents?.A && session.pendingStart && !session.started) {
-      session.started = true;
-      session.pendingStart = false;
-      session.currentUserId = session.parents.A.userId;
-      session.currentUserName = session.parents.A.name;
-      console.log("[join] parents.A already set → schedule scene for", session.currentUserName);
-      setTimeout(async () => {
-        await startFirstSceneByPush(householdId);
-      }, 3000);
+      const { data: hh } = await supabase
+        .from("households")
+        .select("child_birth_year")
+        .eq("group_id", householdId)
+        .maybeSingle();
+
+      if (hh?.child_birth_year) {
+        session.started = true;
+        session.pendingStart = false;
+        session.currentUserId = session.parents.A.userId;
+        session.currentUserName = session.parents.A.name;
+        console.log("[join] parents.A already set → schedule scene for", session.currentUserName);
+        setTimeout(async () => {
+          await startFirstSceneByPush(householdId);
+        }, 3000);
+      } else {
+        console.log("[join] parents.A already set but birth date not registered → waiting");
+      }
     }
   }
 
@@ -301,19 +333,32 @@ if (event.type === "follow") {
         await replyText(replyToken, `${year}年${month}月生まれね、わかったにゃ🐾\nその子に合ったシナリオをお届けするにゃ！`);
 
         // 生年月設定後、自動でセッション開始
+        // memberJoined で登録済みの parents・firstSpeaker を保持してから startSession する
+        const prevSession = getSession(householdId);
+        const savedParents = prevSession?.parents;
+        const savedFirstSpeaker = prevSession?.firstSpeaker;
+
         await startSession(householdId, crypto.randomUUID());
         const profile = await getLineProfile(source.userId, householdId);
         const displayName = profile?.displayName || "あなた";
         const session = getSession(householdId);
-        if (!session.parents) session.parents = { A: null, B: null };
-        session.parents.A = { userId: source.userId, name: displayName };
-        if (!session.firstSpeaker) {
-          session.firstSpeaker = Math.random() < 0.5 ? "A" : "B";
+
+        // parents を復元（memberJoined で登録済みなら上書きしない）
+        session.parents = savedParents || { A: null, B: null };
+        if (!session.parents.A) {
+          session.parents.A = { userId: source.userId, name: displayName };
         }
+
+        // firstSpeaker を復元（なければ新たに決める）
+        session.firstSpeaker = savedFirstSpeaker || (Math.random() < 0.5 ? "A" : "B");
         session.turn = session.firstSpeaker;
-        session.currentUserId = source.userId;
-        session.currentUserName = displayName;
+
+        // currentUser は firstSpeaker に合わせる
+        const firstParent = session.firstSpeaker === "A" ? session.parents.A : session.parents.B;
+        session.currentUserId = firstParent?.userId || source.userId;
+        session.currentUserName = firstParent?.name || displayName;
         session.finishedUsers = [];
+        session.started = true;
         await startFirstSceneByPush(householdId);
       }
       continue;
