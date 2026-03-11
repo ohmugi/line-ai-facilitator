@@ -393,7 +393,10 @@ if (event.type === "follow") {
             name: nameB,
           };
 
+          session.currentUserId = source.userId;
+          session.currentUserName = nameB;
           console.log("[PARENTS] Bに登録:", session.parents.B);
+          await saveSession(householdId);
         }
 
         // ======== 再開キーワード ========
@@ -752,6 +755,7 @@ if (event.type === "follow") {
   session.finishedUsers = session.finishedUsers || [];
   session.finishedUsers.push(source.userId);
   console.log("[FINISHED]", session.finishedUsers);
+  console.log("[PARENTS STATE]", JSON.stringify(session.parents));
 
   // 2人揃ってるかチェック
   const parents = session.parents;
