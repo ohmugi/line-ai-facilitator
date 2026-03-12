@@ -144,7 +144,7 @@ liffRouter.post("/onboarding", async (req, res) => {
       return res.json({
         household: enrichHousehold(household),
         user: existingUser,
-        inviteUrl: `${process.env.APP_URL}/invite/${household.invite_code}`,
+        inviteUrl: `https://liff.line.me/${process.env.LIFF_ID}?invite=${household.invite_code}`,
       });
     }
 
@@ -175,7 +175,7 @@ liffRouter.post("/onboarding", async (req, res) => {
     res.json({
       household: enrichHousehold(household),
       user,
-      inviteUrl: `${process.env.APP_URL}/invite/${household.invite_code}`,
+      inviteUrl: `https://liff.line.me/${process.env.LIFF_ID}?invite=${household.invite_code}`,
     });
   } catch (err) {
     console.error("[liff/onboarding]", err);
