@@ -139,8 +139,9 @@ export default function HomePage() {
   const sessions   = useAppStore((s) => s.sessions);
   const setSessions = useAppStore((s) => s.setSessions);
 
-  const appUrl     = import.meta.env.VITE_APP_URL || window.location.origin;
-  const inviteUrl  = `${appUrl}/invite/${household?.invite_code}`;
+  const liffId    = import.meta.env.VITE_LIFF_ID;
+  const inviteUrl = `https://liff.line.me/${liffId}?invite=${household?.invite_code}`;
+=======
   const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(
     `パートナーを招待するにゃ🐾\n一緒に「けみー」をやってみよう！\n${inviteUrl}`
   )}`;

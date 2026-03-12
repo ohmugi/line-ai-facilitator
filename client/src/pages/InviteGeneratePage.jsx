@@ -10,8 +10,8 @@ export default function InviteGeneratePage() {
   const household = useAppStore((s) => s.household);
   const [copied, setCopied] = useState(false);
 
-  const appUrl    = import.meta.env.VITE_APP_URL || window.location.origin;
-  const inviteUrl = `${appUrl}/invite/${household?.invite_code}`;
+  const liffId    = import.meta.env.VITE_LIFF_ID;
+  const inviteUrl = `https://liff.line.me/${liffId}?invite=${household?.invite_code}`;
 
   const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(
     `パートナーを招待するにゃ🐾\n一緒に「けみー」をやってみよう！\n${inviteUrl}`
