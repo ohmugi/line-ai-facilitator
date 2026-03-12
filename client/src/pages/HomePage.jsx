@@ -140,8 +140,7 @@ export default function HomePage() {
   const setSessions = useAppStore((s) => s.setSessions);
 
   const liffId    = import.meta.env.VITE_LIFF_ID;
-  
-=======
+  const inviteUrl = `https://liff.line.me/${liffId}?invite=${household?.invite_code}`;
   const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(
     `パートナーを招待するにゃ🐾\n一緒に「けみー」をやってみよう！\n${inviteUrl}`
   )}`;
