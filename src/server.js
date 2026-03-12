@@ -29,6 +29,7 @@ import { pushQuickMention } from "./line/pushQuickMention.js";
 import { handleJoin } from "./handlers/join.js";
 import { handleFollow } from "./handlers/follow.js";
 import { startFirstSceneByPush, startFirstSceneByPushWithTarget } from "./logic/startFirstSceneByPush.js";
+import { liffRouter } from "./api/liff.js";
 
 
 
@@ -58,6 +59,9 @@ app.use(express.static(path.join(__dirname, "../public")));
 
 // JSON ボディパーサー（API 用）
 app.use("/api", express.json());
+
+// LIFF API ルーター
+app.use("/api/liff", liffRouter);
 function updateContext(session) {
   session.context = {
     sceneText: session.sceneText,
