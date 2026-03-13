@@ -115,8 +115,10 @@ async function deliverSessions(householdId, birthYear, birthMonth) {
 // 初回設定: 生年月登録 → household + user 作成 → セッション配信
 // ============================================================
 liffRouter.post("/onboarding", async (req, res) => {
+  console.log("[onboarding] body:", JSON.stringify(req.body));
   try {
     const { liffIdToken, childBirthYear, childBirthMonth } = req.body;
+    console.log("[onboarding] liffIdToken exists:", !!liffIdToken, "LIFF_CHANNEL_ID exists:", !!process.env.LIFF_CHANNEL_ID);
     const { lineUserId, displayName } = await verifyLiffToken(liffIdToken);
 
     // 既存ユーザー確認
