@@ -13,7 +13,13 @@ async function request(method, path, body, idToken) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const json = await res.json();
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`サーバーエラー (${res.status}): ${text.slice(0, 200)}`);
+  }
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
   return json;
 }
