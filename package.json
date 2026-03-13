@@ -5,6 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node src/server.js",
+    "build": "cd client && npm install && npm run build",
     "start": "node src/server.js"
   },
   "engines": {
