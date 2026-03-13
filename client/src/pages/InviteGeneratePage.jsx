@@ -42,7 +42,11 @@ export default function InviteGeneratePage() {
         </div>
 
         {/* LINEで送る */}
-        <a href={lineShareUrl} className="block mb-3">
+        <a
+          href={lineShareUrl}
+          className="block mb-3"
+          onClick={() => setTimeout(() => navigate("/home"), 500)}
+        >
           <button className="w-full flex items-center justify-center gap-2 bg-green-500 text-white font-semibold py-4 rounded-2xl">
             <MessageCircle size={20} />
             LINEで送る
