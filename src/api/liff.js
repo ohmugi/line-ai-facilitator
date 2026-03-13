@@ -119,6 +119,9 @@ liffRouter.post("/onboarding", async (req, res) => {
   try {
     const { liffIdToken, childBirthYear, childBirthMonth } = req.body;
     console.log("[onboarding] liffIdToken exists:", !!liffIdToken, "LIFF_CHANNEL_ID exists:", !!process.env.LIFF_CHANNEL_ID);
+    if (!liffIdToken) {
+      return res.status(400).json({ error: "LINEアプリからアクセスしてくださいにゃ🐾" });
+    }
     const { lineUserId, displayName } = await verifyLiffToken(liffIdToken);
 
     // 既存ユーザー確認

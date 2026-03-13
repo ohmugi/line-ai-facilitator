@@ -53,6 +53,10 @@ export default function OnboardingPage() {
 
   const handleSubmit = async () => {
     if (!year || !month) return;
+    if (!idToken) {
+      setError("LINEアプリから開いてくださいにゃ🐾");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
