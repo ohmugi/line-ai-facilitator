@@ -85,7 +85,8 @@ async function deliverSessions(householdId, birthYear, birthMonth) {
     .from("scenes")
     .select("id")
     .eq("is_active", true)
-    .in("age_group", [ageGroup, "universal"]);
+    .in("age_group", [ageGroup, "universal"])
+    .limit(3);
 
   if (!scenarios?.length) return;
 
