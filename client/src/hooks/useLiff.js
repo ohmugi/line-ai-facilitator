@@ -26,6 +26,7 @@ export function useLiff() {
       }
 
       const idToken     = liff.getIDToken();
+      console.log("[useLiff] getIDToken:", idToken ? "OK" : "NULL");
       const profile     = await liff.getProfile();
 
       setLiff({
