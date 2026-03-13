@@ -1,7 +1,26 @@
 // src/App.jsx
+import { Component } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useLiff } from "./hooks/useLiff";
 import { useAppStore } from "./stores/appStore";
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: "20px", color: "#333" }}>
+          <h2>エラーが発生しました</h2>
+          <pre style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
+            {String(this.state.error)}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 import OnboardingPage     from "./pages/OnboardingPage";
 import InviteGeneratePage from "./pages/InviteGeneratePage";
@@ -53,10 +72,12 @@ function AppRoutes() {
 export default function App() {
   useLiff();
   return (
-    <BrowserRouter>
-      <div className="min-h-screen max-w-md mx-auto">
-        <AppRoutes />
-      </div>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <div className="min-h-screen max-w-md mx-auto">
+          <AppRoutes />
+        </div>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
