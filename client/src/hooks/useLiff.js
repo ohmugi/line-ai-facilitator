@@ -33,10 +33,9 @@ export function useLiff() {
         lineUserId:  profile.userId,
         displayName: profile.displayName,
         idToken,
-        liffReady:   true,
       });
 
-      // バックエンドからユーザー情報を取得
+      // バックエンドからユーザー情報を取得（完了後にliffReadyをtrueにする）
       try {
         const { user, household, partner } = await api.getMe(idToken);
         if (user) {
@@ -46,6 +45,8 @@ export function useLiff() {
         }
       } catch (err) {
         console.error("[useLiff] getMe failed:", err);
+      } finally {
+        setLiff({ liffReady: true });
       }
     }).catch((err) => {
       console.error("[LIFF init error]", err);
