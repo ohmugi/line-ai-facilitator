@@ -238,6 +238,9 @@ liffRouter.get("/me", async (req, res) => {
 liffRouter.post("/invite/join", async (req, res) => {
   try {
     const { liffIdToken, inviteCode } = req.body;
+    if (!liffIdToken) {
+      return res.status(400).json({ error: "LINEアプリから開いてにゃ🐾" });
+    }
     const { lineUserId, displayName } = await verifyLiffToken(liffIdToken);
 
     // 招待コードで household 取得

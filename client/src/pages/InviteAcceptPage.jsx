@@ -42,6 +42,17 @@ export default function InviteAcceptPage({ inviteCode }) {
 
   if (loading) return <LoadingScreen />;
 
+  if (!idToken) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
+        <span className="text-4xl">📱</span>
+        <p className="text-gray-600 text-center text-sm">
+          LINEアプリ内から招待リンクを開いてにゃ🐾
+        </p>
+      </div>
+    );
+  }
+
   if (error && !inviter) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
