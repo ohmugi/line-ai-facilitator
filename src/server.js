@@ -986,6 +986,13 @@ app.get("*", (_, res) => {
  * =========================
  */
 const PORT = process.env.PORT || 3000;
+
+// 起動時に静的ファイルの存在を確認
+const publicHtmlPath = path.join(__dirname, "../public/index.html");
+const distHtmlPath   = path.join(__dirname, "../client/dist/index.html");
+console.log("[STATIC] public/index.html:", existsSync(publicHtmlPath) ? "EXISTS" : "NOT FOUND");
+console.log("[STATIC] client/dist/index.html:", existsSync(distHtmlPath) ? "EXISTS" : "NOT FOUND");
+console.log("[STATIC] VITE_LIFF_ID set:", !!process.env.VITE_LIFF_ID);
 console.log("ABOUT TO LISTEN");
 
 app.listen(PORT, "0.0.0.0", () => {

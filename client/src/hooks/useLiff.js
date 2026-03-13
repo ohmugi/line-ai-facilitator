@@ -14,7 +14,12 @@ export function useLiff() {
   useEffect(() => {
     const liffId = import.meta.env.VITE_LIFF_ID;
 
-    liff.init({ liffId }).then(async () => {
+    // 10秒でタイムアウト（無限ループ防止）
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("LIFF init timeout")), 10000)
+    );
+
+    Promise.race([liff.init({ liffId }), timeout]).then(async () => {
       if (!liff.isLoggedIn()) {
         liff.login();
         return;
