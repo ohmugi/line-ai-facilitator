@@ -970,6 +970,12 @@ ${session.sceneText}
 
 
 
+// SPA フォールバック（React Router 用）
+// /api, /webhook 以外の GET リクエストはすべて index.html を返す
+app.get("*", (_, res) => {
+  res.sendFile(path.join(__dirname, "../public/index.html"));
+});
+
 /**
  * =========================
  * Server start
