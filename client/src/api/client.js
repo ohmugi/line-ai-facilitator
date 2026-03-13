@@ -1,7 +1,7 @@
 // src/api/client.js
 // バックエンド API クライアント（すべての書き込みはここ経由）
 
-const BASE = "/api/liff";
+const BASE = `${import.meta.env.VITE_API_BASE_URL || ""}/api/liff`;
 
 async function request(method, path, body, idToken) {
   const headers = { "Content-Type": "application/json" };
