@@ -6,6 +6,7 @@ console.log("SERVER BOOT START");
 import "dotenv/config";
 import express from "express";
 import crypto from "crypto";
+import { existsSync } from "fs";
 
 import { replyText } from "./line/reply.js";
 import { saveMessage } from "./supabase/messages.js";
@@ -54,8 +55,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
-// 静的ファイル（dashboard.html など）
+// 静的ファイル（vite build 出力: public/ または client/dist/）
 app.use(express.static(path.join(__dirname, "../public")));
+app.use(express.static(path.join(__dirname, "../client/dist")));
 
 // JSON ボディパーサー（API 用）
 app.use("/api", express.json());
@@ -973,7 +975,9 @@ ${session.sceneText}
 // SPA フォールバック（React Router 用）
 // /api, /webhook 以外の GET リクエストはすべて index.html を返す
 app.get("*", (_, res) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"));
+  const publicHtml = path.join(__dirname, "../public/index.html");
+  const distHtml   = path.join(__dirname, "../client/dist/index.html");
+  res.sendFile(existsSync(publicHtml) ? publicHtml : distHtml);
 });
 
 /**
