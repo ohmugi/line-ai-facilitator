@@ -26,6 +26,25 @@ import LoadingScreen from "../components/LoadingScreen";
 
 const STEPS = ["step1", "step2", "step3", "step4"];
 
+// ============================================================
+// 子どもレンズ固定データ
+// ============================================================
+const CHILD_LENS_REASON_TYPES = [
+  "気質・生まれつきの性格だと思う",
+  "最近のエピソードや体験から",
+  "自分（親）の育て方や関わり方の影響",
+  "よくわからない・なんとなくそう感じた",
+];
+
+const CHILD_LENS_FEELINGS = [
+  { label: "安心する・それでいいと思う",    emoji: "😌" },
+  { label: "心配になる",                    emoji: "😟" },
+  { label: "何とかしてあげたい",            emoji: "🤗" },
+  { label: "自分のせいかもしれない",        emoji: "😔" },
+  { label: "複雑・どうしたらいいか迷う",    emoji: "😕" },
+  { label: "もどかしい・歯がゆい",          emoji: "😤" },
+];
+
 // Step1 の固定データ
 const EMOTIONS = [
   { label: "心配・不安",    emoji: "😟" },
@@ -265,9 +284,121 @@ function Step4({ options, question, onChange, value }) {
 }
 
 // ============================================================
+// 子どもレンズ Step コンポーネント群
+// ============================================================
+
+/** Step A: 子どもの行動予測（AI生成選択肢） */
+function ChildLensStepA({ options, question, value, onChange }) {
+  return (
+    <div className="space-y-3">
+      {question && (
+        <div className="bg-sky-50 rounded-2xl px-4 py-3 mb-4">
+          <p className="text-sm text-sky-700 font-medium">{question}</p>
+        </div>
+      )}
+      {(options || []).map((opt) => (
+        <button
+          key={opt}
+          onClick={() => onChange({ behavior: opt })}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value?.behavior === opt ? "border-sky-400 bg-sky-50" : "border-gray-100 bg-white"}`}
+        >
+          <span className="text-sm text-gray-700">{opt}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Step B: 根拠の性質（固定選択肢） */
+function ChildLensStepB({ question, value, onChange }) {
+  return (
+    <div className="space-y-3">
+      {question && (
+        <div className="bg-amber-50 rounded-2xl px-4 py-3 mb-4">
+          <p className="text-sm text-amber-700 font-medium">{question}</p>
+        </div>
+      )}
+      {CHILD_LENS_REASON_TYPES.map((opt) => (
+        <button
+          key={opt}
+          onClick={() => onChange({ reasonType: opt })}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value?.reasonType === opt ? "border-amber-400 bg-amber-50" : "border-gray-100 bg-white"}`}
+        >
+          <span className="text-sm text-gray-700">{opt}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Step C: 感情反応（固定選択肢） */
+function ChildLensStepC({ question, value, onChange }) {
+  return (
+    <div className="space-y-3">
+      {question && (
+        <div className="bg-rose-50 rounded-2xl px-4 py-3 mb-4">
+          <p className="text-sm text-rose-700 font-medium">{question}</p>
+        </div>
+      )}
+      {CHILD_LENS_FEELINGS.map(({ label, emoji }) => (
+        <button
+          key={label}
+          onClick={() => onChange({ feeling: label })}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value?.feeling === label ? "border-rose-400 bg-rose-50" : "border-gray-100 bg-white"}`}
+        >
+          <span className="text-2xl">{emoji}</span>
+          <span className="text-sm text-gray-700">{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Step D: 理想像（AI生成選択肢） */
+function ChildLensStepD({ options, question, value, onChange }) {
+  return (
+    <div className="space-y-3">
+      {question && (
+        <div className="bg-violet-50 rounded-2xl px-4 py-3 mb-4">
+          <p className="text-sm text-violet-700 font-medium">{question}</p>
+        </div>
+      )}
+      {(options || []).map((opt) => (
+        <button
+          key={opt}
+          onClick={() => onChange({ ideal: opt })}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value?.ideal === opt ? "border-violet-400 bg-violet-50" : "border-gray-100 bg-white"}`}
+        >
+          <span className="text-sm text-gray-700">{opt}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
 // パートナータブ
 // ============================================================
-function PartnerTab({ partnerAnswers }) {
+function PartnerTab({ partnerAnswers, isChildLens, partnerCompleted }) {
+  // 子どもレンズはパートナー完了前は非表示
+  if (isChildLens && !partnerCompleted) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3">
+        <span className="text-4xl">🔒</span>
+        <p className="text-sm text-gray-400 text-center">
+          パートナーが完了するまで<br />見立ては非公開にゃ🐾
+        </p>
+        <p className="text-xs text-gray-300 text-center mt-1">
+          先に答えを見ると、お互いの「素直な見立て」が<br />影響し合ってしまうためにゃ
+        </p>
+      </div>
+    );
+  }
+
   if (!partnerAnswers?.length) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -275,6 +406,31 @@ function PartnerTab({ partnerAnswers }) {
         <p className="text-sm text-gray-400 text-center">
           パートナーの回答待ちにゃ🐾
         </p>
+      </div>
+    );
+  }
+
+  // 子どもレンズ用表示
+  if (isChildLens) {
+    const stepLabels = {
+      step1: "Step A: 子どもの行動予測",
+      step2: "Step B: そう思う根拠",
+      step3: "Step C: 感情反応",
+      step4: "Step D: 理想像",
+    };
+    return (
+      <div className="space-y-4">
+        {partnerAnswers.map((a) => (
+          <div key={a.step} className="bg-white rounded-2xl p-4 border border-gray-100">
+            <p className="text-xs font-medium text-gray-400 mb-2">{stepLabels[a.step] || a.step}</p>
+            <div className="text-sm text-gray-700 space-y-1">
+              {a.step === "step1" && <p>行動予測: {a.answer?.behavior}</p>}
+              {a.step === "step2" && <p>根拠: {a.answer?.reasonType}</p>}
+              {a.step === "step3" && <p>感情: {a.answer?.feeling}</p>}
+              {a.step === "step4" && <p>理想像: {a.answer?.ideal}</p>}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -391,9 +547,12 @@ export default function SessionPage() {
   const [showReflection, setShowReflection] = useState(false);
   const [loading,    setLoading]    = useState(true);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [partnerCompleted, setPartnerCompleted] = useState(false);
 
   // Step1 の一時状態（サブステップ間で保持）
   const [step1Draft, setStep1Draft] = useState({ emotion: "", intensity: null, thought: "" });
+
+  const isChildLens = session?.scenario?.session_type === "child_lens";
 
   useRealtimeSession(sessionId);
 
@@ -409,6 +568,9 @@ export default function SessionPage() {
 
       const theirs = answers.filter((a) => a.user_id !== user?.id);
       setPartnerAnswers(theirs.map((a) => ({ step: a.step, answer: a.answer })));
+      // パートナーが4ステップ全て完了しているか
+      const partnerSteps = new Set(theirs.map((a) => a.step));
+      setPartnerCompleted(STEPS.every((s) => partnerSteps.has(s)));
 
       // 完了済みリフレクションを復元
       if (session.reflection) {
@@ -428,10 +590,9 @@ export default function SessionPage() {
     });
   }, [sessionId, user?.id]);
 
-  // liff_sessions のカップルリフレクションをリアルタイム受信
-  // （パートナーが完了したとき couple_reflection が書き込まれる）
+  // liff_sessions のカップルリフレクション・パートナー完了をリアルタイム受信
   useEffect(() => {
-    if (!sessionId || coupleReflection) return; // 既に受信済みなら不要
+    if (!sessionId) return;
     const channel = supabase
       .channel(`session-couple:${sessionId}`)
       .on("postgres_changes", {
@@ -439,25 +600,79 @@ export default function SessionPage() {
         filter: `id=eq.${sessionId}`,
       }, (payload) => {
         const cr = payload.new?.couple_reflection;
-        if (cr) setCoupleReflection(cr);
+        if (cr && !coupleReflection) setCoupleReflection(cr);
+
+        // パートナーが完了したか確認（子どもレンズのパートナータブ開示用）
+        const partnerField = payload.new?.user1_id === user?.id
+          ? "user2_current_step"
+          : "user1_current_step";
+        if (payload.new?.[partnerField] === "completed") {
+          setPartnerCompleted(true);
+        }
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [sessionId, coupleReflection]);
+  }, [sessionId]);
 
-  // step2〜4 の選択肢を自動取得（step1 は手動）
+  // 選択肢を自動取得
+  // - 親目線: step2〜4 のみ自動取得（step1 は感情選択後に手動）
+  // - 子どもレンズ: step1（Step A）・step4（Step D）はAI生成、step2・3は固定なのでAPIから取得しない
   useEffect(() => {
-    if (!session || stepIndex >= 4 || stepIndex === 0) return;
+    if (!session || stepIndex >= 4) return;
     const step = STEPS[stepIndex];
     if (myAnswers[step]) return;
 
-    setLoadingOpts(true);
-    api.getOptions(sessionId, step, user?.id)
-      .then(({ options, question }) => {
-        setOptions(options);
-        setQuestion(question);
-      })
-      .finally(() => setLoadingOpts(false));
+    const childLens = session?.scenario?.session_type === "child_lens";
+
+    if (childLens) {
+      if (step === "step1") {
+        // Step A: AI生成
+        setLoadingOpts(true);
+        api.getOptions(sessionId, "step1", user?.id)
+          .then(({ options, question }) => {
+            setOptions(options);
+            setQuestion(question);
+          })
+          .finally(() => setLoadingOpts(false));
+      } else if (step === "step2") {
+        // Step B: 固定選択肢をAPIから取得
+        setLoadingOpts(true);
+        api.getOptions(sessionId, "step2", user?.id)
+          .then(({ options, question }) => {
+            setOptions(options);
+            setQuestion(question);
+          })
+          .finally(() => setLoadingOpts(false));
+      } else if (step === "step3") {
+        // Step C: 固定選択肢をAPIから取得
+        setLoadingOpts(true);
+        api.getOptions(sessionId, "step3", user?.id)
+          .then(({ options, question }) => {
+            setOptions(options);
+            setQuestion(question);
+          })
+          .finally(() => setLoadingOpts(false));
+      } else if (step === "step4") {
+        // Step D: AI生成（Step A・C のコンテキスト込み）
+        setLoadingOpts(true);
+        api.getOptions(sessionId, "step4", user?.id)
+          .then(({ options, question }) => {
+            setOptions(options);
+            setQuestion(question);
+          })
+          .finally(() => setLoadingOpts(false));
+      }
+    } else {
+      // 親目線: step1 は手動、step2〜4 は自動取得
+      if (stepIndex === 0) return;
+      setLoadingOpts(true);
+      api.getOptions(sessionId, step, user?.id)
+        .then(({ options, question }) => {
+          setOptions(options);
+          setQuestion(question);
+        })
+        .finally(() => setLoadingOpts(false));
+    }
   }, [stepIndex, session?.id]);
 
   const currentStep   = STEPS[stepIndex];
@@ -466,6 +681,15 @@ export default function SessionPage() {
 
   // 「次へ」ボタンの活性判定
   const isAnswerReady = (() => {
+    if (isChildLens) {
+      // 子どもレンズ: 各ステップの answer オブジェクトが存在するか
+      if (currentStep === "step1") return !!currentAnswer?.behavior;
+      if (currentStep === "step2") return !!currentAnswer?.reasonType;
+      if (currentStep === "step3") return !!currentAnswer?.feeling;
+      if (currentStep === "step4") return !!currentAnswer?.ideal;
+      return false;
+    }
+    // 親目線
     if (stepIndex === 0) {
       if (step1SubStep === 0) return !!step1Draft.emotion;
       if (step1SubStep === 1) return step1Draft.intensity !== null;
@@ -475,7 +699,32 @@ export default function SessionPage() {
   })();
 
   const handleNext = async () => {
-    // Step1 サブステップの処理
+    // ── 子どもレンズ: サブステップなし、直接保存 ──
+    if (isChildLens) {
+      if (!isAnswerReady) return;
+      setSaving(true);
+      try {
+        await api.saveAnswer(sessionId, user.id, currentStep, currentAnswer);
+        setMyAnswers((prev) => ({ ...prev, [currentStep]: currentAnswer }));
+
+        if (stepIndex === 3) {
+          const { reflection } = await api.completeSession(sessionId, user.id);
+          if (reflection?.perUser?.[user.id]) setMyReflectionText(reflection.perUser[user.id]);
+          if (reflection?.difference) setCoupleReflection(reflection.difference);
+          setShowReflection(true);
+          setStepIndex(4);
+        } else {
+          setOptions(null);
+          setQuestion(null);
+          setStepIndex((i) => i + 1);
+        }
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    // ── 親目線: Step1 サブステップの処理 ──
     if (stepIndex === 0) {
       if (step1SubStep === 0) {
         setStep1SubStep(1);
@@ -536,8 +785,11 @@ export default function SessionPage() {
 
   // ヘッダーラベル
   const stepLabel = showReflection ? "リフレクション" :
-    stepIndex === 0 ? ["気持ちを選ぶ", "感じた強さ", "どう思った？"][step1SubStep] :
-    ["Step 2/4", "Step 3/4", "Step 4/4", "完了"][stepIndex - 1];
+    isChildLens
+      ? (["Step A: 行動予測", "Step B: 根拠", "Step C: 感情", "Step D: 理想像", "完了"][stepIndex] || "完了")
+      : stepIndex === 0
+        ? ["気持ちを選ぶ", "感じた強さ", "どう思った？"][step1SubStep]
+        : ["Step 2/4", "Step 3/4", "Step 4/4", "完了"][stepIndex - 1];
 
   // ============================================================
   // UI
@@ -607,7 +859,11 @@ export default function SessionPage() {
             <motion.div key="partner"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             >
-              <PartnerTab partnerAnswers={partnerAnswers} />
+              <PartnerTab
+                partnerAnswers={partnerAnswers}
+                isChildLens={isChildLens}
+                partnerCompleted={partnerCompleted}
+              />
             </motion.div>
           ) : loadingOpts ? (
             <motion.div key="loading"
@@ -620,20 +876,53 @@ export default function SessionPage() {
             <motion.div key={`${currentStep}-${step1SubStep}`}
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
             >
-              {currentStep === "step1" && step1SubStep === 0 && (
+              {/* ── 子どもレンズ ── */}
+              {isChildLens && currentStep === "step1" && (
+                <ChildLensStepA
+                  options={options}
+                  question={question}
+                  value={currentAnswer}
+                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step1: v }))}
+                />
+              )}
+              {isChildLens && currentStep === "step2" && (
+                <ChildLensStepB
+                  question={question}
+                  value={currentAnswer}
+                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step2: v }))}
+                />
+              )}
+              {isChildLens && currentStep === "step3" && (
+                <ChildLensStepC
+                  question={question}
+                  value={currentAnswer}
+                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step3: v }))}
+                />
+              )}
+              {isChildLens && currentStep === "step4" && (
+                <ChildLensStepD
+                  options={options}
+                  question={question}
+                  value={currentAnswer}
+                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step4: v }))}
+                />
+              )}
+
+              {/* ── 親目線 ── */}
+              {!isChildLens && currentStep === "step1" && step1SubStep === 0 && (
                 <Step1Emotion
                   value={step1Draft.emotion}
                   onChange={(e) => setStep1Draft((d) => ({ ...d, emotion: e }))}
                 />
               )}
-              {currentStep === "step1" && step1SubStep === 1 && (
+              {!isChildLens && currentStep === "step1" && step1SubStep === 1 && (
                 <Step1Intensity
                   emotion={step1Draft.emotion}
                   value={step1Draft.intensity}
                   onChange={(v) => setStep1Draft((d) => ({ ...d, intensity: v }))}
                 />
               )}
-              {currentStep === "step1" && step1SubStep === 2 && (
+              {!isChildLens && currentStep === "step1" && step1SubStep === 2 && (
                 <Step1Thought
                   emotion={step1Draft.emotion}
                   intensity={step1Draft.intensity}
@@ -642,7 +931,7 @@ export default function SessionPage() {
                   onChange={(t) => setStep1Draft((d) => ({ ...d, thought: t }))}
                 />
               )}
-              {currentStep === "step2" && (
+              {!isChildLens && currentStep === "step2" && (
                 <Step2
                   options={options}
                   question={question}
@@ -650,7 +939,7 @@ export default function SessionPage() {
                   onChange={(v) => setMyAnswers((prev) => ({ ...prev, step2: v }))}
                 />
               )}
-              {currentStep === "step3" && (
+              {!isChildLens && currentStep === "step3" && (
                 <Step3
                   options={options}
                   question={question}
@@ -658,7 +947,7 @@ export default function SessionPage() {
                   onChange={(v) => setMyAnswers((prev) => ({ ...prev, step3: v }))}
                 />
               )}
-              {currentStep === "step4" && (
+              {!isChildLens && currentStep === "step4" && (
                 <Step4
                   options={options}
                   question={question}

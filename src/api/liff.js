@@ -9,6 +9,9 @@ import { generateStep3Options } from "../ai/generateStep3.js";
 import { generateStep4Options } from "../ai/generateStep4.js";
 import { generateReflection } from "../ai/generateReflection.js";
 import { generateCoupleReflection } from "../ai/generateCoupleReflection.js";
+import { generateChildLensStepAOptions } from "../ai/generateChildLensStepA.js";
+import { generateChildLensStepDOptions } from "../ai/generateChildLensStepD.js";
+import { generateChildLensReflection, generateChildLensCoupleReflection } from "../ai/generateChildLensReflection.js";
 import { callClaude } from "../ai/claude.js";
 
 export const liffRouter = Router();
@@ -398,7 +401,67 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
 
     if (!session) return res.status(404).json({ error: "Session not found" });
 
-    const sceneText = session.scenario.scene_text;
+    const sceneText  = session.scenario.scene_text;
+    const sessionType = session.scenario.session_type || "parent";
+
+    // ============================================================
+    // 子どもレンズ (child_lens) セッション用選択肢生成
+    // ============================================================
+    if (sessionType === "child_lens") {
+      // Step A (step1): AI が子どもの行動選択肢を生成
+      if (step === "step1") {
+        const options = await generateChildLensStepAOptions({ sceneText });
+        return res.json({ options, question: "子どもはどうすると思う？" });
+      }
+
+      // Step B (step2): 固定選択肢（根拠の性質）
+      if (step === "step2") {
+        return res.json({
+          options: [
+            "気質・生まれつきの性格だと思う",
+            "最近のエピソードや体験から",
+            "自分（親）の育て方や関わり方の影響",
+            "よくわからない・なんとなくそう感じた",
+          ],
+          question: "なぜそう思う？その根拠は？",
+        });
+      }
+
+      // Step C (step3): 固定選択肢（感情反応）
+      if (step === "step3") {
+        return res.json({
+          options: [
+            "安心する・それでいいと思う",
+            "心配になる",
+            "何とかしてあげたい",
+            "自分のせいかもしれない",
+            "複雑・どうしたらいいか迷う",
+            "もどかしい・歯がゆい",
+          ],
+          question: "そのとき、あなたはどう感じる？",
+        });
+      }
+
+      // Step D (step4): AI が理想像選択肢を生成（Step A + Step C のコンテキスト込み）
+      if (step === "step4") {
+        const { data: answers } = await supabase
+          .from("session_answers")
+          .select("step, answer")
+          .eq("session_id", req.params.id)
+          .eq("user_id", userId);
+        const byStep = Object.fromEntries((answers || []).map((a) => [a.step, a.answer]));
+        const behaviorChoice = byStep.step1?.behavior || "";
+        const feelingChoice  = byStep.step3?.feeling  || "";
+        const options = await generateChildLensStepDOptions({ sceneText, behaviorChoice, feelingChoice });
+        return res.json({ options, question: "本当はどうなってほしい？" });
+      }
+
+      return res.status(400).json({ error: `Unknown step: ${step}` });
+    }
+
+    // ============================================================
+    // 既存の親目線 (parent) セッション用選択肢生成
+    // ============================================================
 
     // Step1-3: emotion + intensity を踏まえた想い・考えを生成（ユーザー別、キャッシュなし）
     if (step === "step1") {
@@ -546,54 +609,101 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
       byUser[a.user_id][a.step] = a.answer;
     }
 
-    const sceneText = session.scenario.scene_text;
-    const isUser1   = session.user1_id === userId;
-    const partnerId = isUser1 ? session.user2_id : session.user1_id;
+    const sceneText   = session.scenario.scene_text;
+    const sessionType = session.scenario.session_type || "parent";
+    const isUser1     = session.user1_id === userId;
+    const partnerId   = isUser1 ? session.user2_id : session.user1_id;
     const partnerStep = isUser1 ? session.user2_current_step : session.user1_current_step;
     const partnerDone = partnerStep === "completed";
 
-    // 自分の個別リフレクションを生成
     const myAns  = byUser[userId] || {};
     const myName = isUser1
       ? session.user1?.display_name || "あなた"
       : session.user2?.display_name || "あなた";
 
-    const s1 = myAns.step1 || {};
-    const emotionAnswer = s1.emotion && s1.intensity && s1.thought
-      ? (() => {
-          const lbl = s1.intensity <= 3 ? "少し" : s1.intensity <= 5 ? "そこそこ" : s1.intensity <= 7 ? "かなり" : "とても強く";
-          return `${s1.emotion}を${lbl}（${s1.intensity}/10）感じ、「${s1.thought}」と思っている`;
-        })()
-      : s1.thought || s1.emotion || "";
+    let myReflectionText = null;
+    let coupleReflectionText = null;
 
-    const myReflectionText = emotionAnswer
-      ? await generateReflection({
+    if (sessionType === "child_lens") {
+      // ── 子どもレンズ 個別リフレクション ──
+      const behaviorChoice = myAns.step1?.behavior || "";
+      const reasonType     = myAns.step2?.reasonType || "";
+      const feelingChoice  = myAns.step3?.feeling    || "";
+      const idealChoice    = myAns.step4?.ideal      || "";
+
+      if (behaviorChoice) {
+        myReflectionText = await generateChildLensReflection({
+          sceneText,
+          behaviorChoice,
+          reasonType,
+          feelingChoice,
+          idealChoice,
+          userName: myName,
+        });
+      }
+
+      // ── 子どもレンズ カップルリフレクション ──
+      if (partnerDone && byUser[partnerId]) {
+        const partnerAns  = byUser[partnerId];
+        const partnerName = isUser1
+          ? session.user2?.display_name || "パートナー"
+          : session.user1?.display_name || "パートナー";
+
+        const u1Ans = isUser1 ? myAns      : partnerAns;
+        const u2Ans = isUser1 ? partnerAns : myAns;
+        const u1Name = isUser1 ? myName    : partnerName;
+        const u2Name = isUser1 ? partnerName : myName;
+
+        coupleReflectionText = await generateChildLensCoupleReflection({
+          sceneText,
+          user1Name:    u1Name,
+          user1Behavior: u1Ans.step1?.behavior || "",
+          user1Feeling:  u1Ans.step3?.feeling  || "",
+          user1Ideal:    u1Ans.step4?.ideal    || "",
+          user2Name:    u2Name,
+          user2Behavior: u2Ans.step1?.behavior || "",
+          user2Feeling:  u2Ans.step3?.feeling  || "",
+          user2Ideal:    u2Ans.step4?.ideal    || "",
+        });
+      }
+    } else {
+      // ── 既存の親目線 個別リフレクション ──
+      const s1 = myAns.step1 || {};
+      const emotionAnswer = s1.emotion && s1.intensity && s1.thought
+        ? (() => {
+            const lbl = s1.intensity <= 3 ? "少し" : s1.intensity <= 5 ? "そこそこ" : s1.intensity <= 7 ? "かなり" : "とても強く";
+            return `${s1.emotion}を${lbl}（${s1.intensity}/10）感じ、「${s1.thought}」と思っている`;
+          })()
+        : s1.thought || s1.emotion || "";
+
+      if (emotionAnswer) {
+        myReflectionText = await generateReflection({
           sceneText,
           emotionAnswer,
           valueChoice:      Array.isArray(myAns.step2?.values) ? myAns.step2.values.join("、") : (myAns.step2?.value || ""),
           backgroundChoice: myAns.step3?.background || "",
           visionChoice:     Array.isArray(myAns.step4?.priorities) ? myAns.step4.priorities.map((p) => p.value).join("、") : (myAns.step4?.vision || ""),
           userName: myName,
-        })
-      : null;
+        });
+      }
 
-    // カップルリフレクション：パートナーも完了済みの場合のみ生成
-    let coupleReflectionText = null;
-    if (partnerDone && byUser[partnerId]) {
-      const partnerAns  = byUser[partnerId];
-      const partnerName = isUser1
-        ? session.user2?.display_name || "パートナー"
-        : session.user1?.display_name || "パートナー";
+      // ── 既存の親目線 カップルリフレクション ──
+      if (partnerDone && byUser[partnerId]) {
+        const partnerAns  = byUser[partnerId];
+        const partnerName = isUser1
+          ? session.user2?.display_name || "パートナー"
+          : session.user1?.display_name || "パートナー";
 
-      coupleReflectionText = await generateCoupleReflection({
-        sceneText,
-        user1Name:  isUser1 ? myName : partnerName,
-        user1Step1: isUser1 ? myAns.step1 : partnerAns.step1,
-        user1Step2: isUser1 ? myAns.step2 : partnerAns.step2,
-        user2Name:  isUser1 ? partnerName : myName,
-        user2Step1: isUser1 ? partnerAns.step1 : myAns.step1,
-        user2Step2: isUser1 ? partnerAns.step2 : myAns.step2,
-      });
+        coupleReflectionText = await generateCoupleReflection({
+          sceneText,
+          user1Name:  isUser1 ? myName : partnerName,
+          user1Step1: isUser1 ? myAns.step1 : partnerAns.step1,
+          user1Step2: isUser1 ? myAns.step2 : partnerAns.step2,
+          user2Name:  isUser1 ? partnerName : myName,
+          user2Step1: isUser1 ? partnerAns.step1 : myAns.step1,
+          user2Step2: isUser1 ? partnerAns.step2 : myAns.step2,
+        });
+      }
     }
 
     // 既存の reflection（パートナーの個別リフレクション）を保持してマージ
