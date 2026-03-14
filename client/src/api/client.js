@@ -50,8 +50,10 @@ export const api = {
     request("GET", `/sessions/${sessionId}`),
 
   /** ステップの選択肢生成 */
-  getOptions: (sessionId, step, userId) =>
-    request("GET", `/sessions/${sessionId}/options?step=${step}&userId=${userId}`),
+  getOptions: (sessionId, step, userId, extraParams = {}) => {
+    const params = new URLSearchParams({ step, userId, ...extraParams });
+    return request("GET", `/sessions/${sessionId}/options?${params}`);
+  },
 
   /** 回答保存 */
   saveAnswer: (sessionId, userId, step, answer) =>
