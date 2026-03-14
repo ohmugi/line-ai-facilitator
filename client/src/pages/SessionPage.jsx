@@ -20,6 +20,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 import { useAppStore } from "../stores/appStore";
 import { useRealtimeSession } from "../hooks/useRealtimeSession";
+import { supabase } from "../api/supabase";
 import { api } from "../api/client";
 import LoadingScreen from "../components/LoadingScreen";
 
@@ -309,34 +310,51 @@ function PartnerTab({ partnerAnswers }) {
 // ============================================================
 // リフレクション
 // ============================================================
-function ReflectionView({ reflection, userId, onHome }) {
-  const myReflection      = reflection?.perUser?.[userId];
-  const differenceSummary = reflection?.difference;
-
+function ReflectionView({ myReflectionText, coupleReflection, onHome }) {
   return (
     <motion.div
       className="space-y-4"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
     >
-      {myReflection && (
+      {/* 個別リフレクション */}
+      {myReflectionText && (
         <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100">
           <p className="text-xs font-medium text-orange-400 mb-2">けみーより🐾</p>
           <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {myReflection}
+            {myReflectionText}
           </p>
         </div>
       )}
 
-      {differenceSummary && (
-        <div className="bg-green-50 rounded-2xl p-5 border border-green-100">
-          <p className="text-xs font-medium text-green-500 mb-2">
-            ふたりの違いと強み 💡
-          </p>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {differenceSummary}
-          </p>
-        </div>
-      )}
+      {/* カップルリフレクション */}
+      <AnimatePresence>
+        {coupleReflection ? (
+          <motion.div
+            key="couple"
+            className="bg-green-50 rounded-2xl p-5 border border-green-100"
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <p className="text-xs font-medium text-green-600 mb-2">
+              ふたりへ 💚
+            </p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+              {coupleReflection}
+            </p>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="waiting"
+            className="bg-gray-50 rounded-2xl p-5 border border-gray-100 text-center"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          >
+            <p className="text-xs text-gray-400 mb-1">ふたりへのメッセージ</p>
+            <p className="text-sm text-gray-400">
+              パートナーが完了したら届くにゃ🐾
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <button
         onClick={onHome}
@@ -368,7 +386,8 @@ export default function SessionPage() {
   const [question,   setQuestion]   = useState(null);
   const [loadingOpts,setLoadingOpts]= useState(false);
   const [saving,     setSaving]     = useState(false);
-  const [reflection, setReflection] = useState(null);
+  const [myReflectionText,  setMyReflectionText]  = useState(null);
+  const [coupleReflection,  setCoupleReflection]  = useState(null);
   const [showReflection, setShowReflection] = useState(false);
   const [loading,    setLoading]    = useState(true);
   const [confirmExit, setConfirmExit] = useState(false);
@@ -391,9 +410,14 @@ export default function SessionPage() {
       const theirs = answers.filter((a) => a.user_id !== user?.id);
       setPartnerAnswers(theirs.map((a) => ({ step: a.step, answer: a.answer })));
 
-      if (session.status === "completed" && session.reflection) {
-        setReflection(session.reflection);
-        setShowReflection(true);
+      // 完了済みリフレクションを復元
+      if (session.reflection) {
+        const perUser = session.reflection.perUser || {};
+        if (perUser[user?.id]) {
+          setMyReflectionText(perUser[user?.id]);
+          setShowReflection(true);
+        }
+        if (session.reflection.difference) setCoupleReflection(session.reflection.difference);
       }
 
       const completedSteps = mine.map((a) => a.step);
@@ -403,6 +427,23 @@ export default function SessionPage() {
       setLoading(false);
     });
   }, [sessionId, user?.id]);
+
+  // liff_sessions のカップルリフレクションをリアルタイム受信
+  // （パートナーが完了したとき couple_reflection が書き込まれる）
+  useEffect(() => {
+    if (!sessionId || coupleReflection) return; // 既に受信済みなら不要
+    const channel = supabase
+      .channel(`session-couple:${sessionId}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "liff_sessions",
+        filter: `id=eq.${sessionId}`,
+      }, (payload) => {
+        const cr = payload.new?.couple_reflection;
+        if (cr) setCoupleReflection(cr);
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [sessionId, coupleReflection]);
 
   // step2〜4 の選択肢を自動取得（step1 は手動）
   useEffect(() => {
@@ -470,7 +511,8 @@ export default function SessionPage() {
 
       if (stepIndex === 3) {
         const { reflection } = await api.completeSession(sessionId, user.id);
-        setReflection(reflection);
+        if (reflection?.perUser?.[user.id]) setMyReflectionText(reflection.perUser[user.id]);
+        if (reflection?.difference) setCoupleReflection(reflection.difference);
         setShowReflection(true);
         setStepIndex(4);
       } else {
@@ -556,8 +598,8 @@ export default function SessionPage() {
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             >
               <ReflectionView
-                reflection={reflection}
-                userId={user?.id}
+                myReflectionText={myReflectionText}
+                coupleReflection={coupleReflection}
                 onHome={() => navigate("/home")}
               />
             </motion.div>

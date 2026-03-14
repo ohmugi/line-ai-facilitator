@@ -8,6 +8,7 @@ import { generateStep2Options } from "../ai/generateStep2.js";
 import { generateStep3Options } from "../ai/generateStep3.js";
 import { generateStep4Options } from "../ai/generateStep4.js";
 import { generateReflection } from "../ai/generateReflection.js";
+import { generateCoupleReflection } from "../ai/generateCoupleReflection.js";
 import { callClaude } from "../ai/claude.js";
 
 export const liffRouter = Router();
@@ -546,70 +547,81 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
     }
 
     const sceneText = session.scenario.scene_text;
-    const userIds = [session.user1_id, session.user2_id].filter(Boolean);
+    const isUser1   = session.user1_id === userId;
+    const partnerId = isUser1 ? session.user2_id : session.user1_id;
+    const partnerStep = isUser1 ? session.user2_current_step : session.user1_current_step;
+    const partnerDone = partnerStep === "completed";
 
-    // 各ユーザーの個別リフレクション生成
-    const reflections = {};
-    for (const uid of userIds) {
-      const ans = byUser[uid] || {};
-      const userName = uid === session.user1_id
-        ? session.user1?.display_name || "あなた"
-        : session.user2?.display_name || "パートナー";
+    // 自分の個別リフレクションを生成
+    const myAns  = byUser[userId] || {};
+    const myName = isUser1
+      ? session.user1?.display_name || "あなた"
+      : session.user2?.display_name || "あなた";
 
-      const s1 = ans.step1 || {};
-      const emotionAnswer = (() => {
-        if (s1.emotion && s1.intensity && s1.thought) {
+    const s1 = myAns.step1 || {};
+    const emotionAnswer = s1.emotion && s1.intensity && s1.thought
+      ? (() => {
           const lbl = s1.intensity <= 3 ? "少し" : s1.intensity <= 5 ? "そこそこ" : s1.intensity <= 7 ? "かなり" : "とても強く";
           return `${s1.emotion}を${lbl}（${s1.intensity}/10）感じ、「${s1.thought}」と思っている`;
-        }
-        return s1.thought || s1.emotion || "";
-      })();
-      const valueChoice      = Array.isArray(ans.step2?.values) ? ans.step2.values.join("、") : (ans.step2?.value || "");
-      const backgroundChoice = ans.step3?.background || "";
-      const visionChoice     = Array.isArray(ans.step4?.priorities)
-        ? ans.step4.priorities.map((p) => p.value).join("、")
-        : (ans.step4?.vision || "");
+        })()
+      : s1.thought || s1.emotion || "";
 
-      if (emotionAnswer) {
-        reflections[uid] = await generateReflection({
-          sceneText, emotionAnswer, valueChoice, backgroundChoice, visionChoice, userName,
-        });
-      }
-    }
+    const myReflectionText = emotionAnswer
+      ? await generateReflection({
+          sceneText,
+          emotionAnswer,
+          valueChoice:      Array.isArray(myAns.step2?.values) ? myAns.step2.values.join("、") : (myAns.step2?.value || ""),
+          backgroundChoice: myAns.step3?.background || "",
+          visionChoice:     Array.isArray(myAns.step4?.priorities) ? myAns.step4.priorities.map((p) => p.value).join("、") : (myAns.step4?.vision || ""),
+          userName: myName,
+        })
+      : null;
 
-    // 夫婦の違いサマリー（両者が完了している場合）
-    let differenceSummary = null;
-    if (userIds.length === 2 && reflections[userIds[0]] && reflections[userIds[1]]) {
-      differenceSummary = await generateCoupleDifference({
+    // カップルリフレクション：パートナーも完了済みの場合のみ生成
+    let coupleReflectionText = null;
+    if (partnerDone && byUser[partnerId]) {
+      const partnerAns  = byUser[partnerId];
+      const partnerName = isUser1
+        ? session.user2?.display_name || "パートナー"
+        : session.user1?.display_name || "パートナー";
+
+      coupleReflectionText = await generateCoupleReflection({
         sceneText,
-        user1Name: session.user1?.display_name || "パートナー1",
-        user1Answers: byUser[session.user1_id] || {},
-        user2Name: session.user2?.display_name || "パートナー2",
-        user2Answers: byUser[session.user2_id] || {},
+        user1Name:  isUser1 ? myName : partnerName,
+        user1Step1: isUser1 ? myAns.step1 : partnerAns.step1,
+        user1Step2: isUser1 ? myAns.step2 : partnerAns.step2,
+        user2Name:  isUser1 ? partnerName : myName,
+        user2Step1: isUser1 ? partnerAns.step1 : myAns.step1,
+        user2Step2: isUser1 ? partnerAns.step2 : myAns.step2,
       });
     }
 
-    const reflection = { perUser: reflections, difference: differenceSummary };
+    // 既存の reflection（パートナーの個別リフレクション）を保持してマージ
+    const existingPerUser = session.reflection?.perUser || {};
+    const newReflection = {
+      perUser: { ...existingPerUser, ...(myReflectionText ? { [userId]: myReflectionText } : {}) },
+      difference: coupleReflectionText,
+    };
 
-    // セッション更新
-    const updateData = { reflection };
-    if (session.status !== "completed") {
-      // 自分の step を completed に
-      const isUser1 = session.user1_id === userId;
-      updateData[isUser1 ? "user1_current_step" : "user2_current_step"] = "completed";
-
-      const otherStep = isUser1 ? session.user2_current_step : session.user1_current_step;
-      if (otherStep === "completed") {
-        updateData.status = "completed";
-        updateData.completed_at = new Date().toISOString();
-      } else {
-        updateData.status = "in_progress";
-      }
+    // セッション状態を更新
+    const updateData = { reflection: newReflection };
+    if (coupleReflectionText) updateData.couple_reflection = coupleReflectionText;
+    updateData[isUser1 ? "user1_current_step" : "user2_current_step"] = "completed";
+    if (partnerDone) {
+      updateData.status = "completed";
+      updateData.completed_at = new Date().toISOString();
+    } else {
+      updateData.status = "in_progress";
     }
 
     await supabase.from("liff_sessions").update(updateData).eq("id", sessionId);
 
-    res.json({ reflection });
+    res.json({
+      reflection: {
+        perUser:    { [userId]: myReflectionText },
+        difference: coupleReflectionText,
+      },
+    });
   } catch (err) {
     console.error("[liff/sessions/:id/complete]", err);
     res.status(500).json({ error: err.message });
