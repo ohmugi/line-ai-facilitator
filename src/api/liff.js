@@ -649,18 +649,18 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
           ? session.user2?.display_name || "パートナー"
           : session.user1?.display_name || "パートナー";
 
-        const u1Ans = isUser1 ? myAns      : partnerAns;
-        const u2Ans = isUser1 ? partnerAns : myAns;
-        const u1Name = isUser1 ? myName    : partnerName;
+        const u1Ans  = isUser1 ? myAns      : partnerAns;
+        const u2Ans  = isUser1 ? partnerAns : myAns;
+        const u1Name = isUser1 ? myName     : partnerName;
         const u2Name = isUser1 ? partnerName : myName;
 
         coupleReflectionText = await generateChildLensCoupleReflection({
           sceneText,
-          user1Name:    u1Name,
+          user1Name:     u1Name,
           user1Behavior: u1Ans.step1?.behavior || "",
           user1Feeling:  u1Ans.step3?.feeling  || "",
           user1Ideal:    u1Ans.step4?.ideal    || "",
-          user2Name:    u2Name,
+          user2Name:     u2Name,
           user2Behavior: u2Ans.step1?.behavior || "",
           user2Feeling:  u2Ans.step3?.feeling  || "",
           user2Ideal:    u2Ans.step4?.ideal    || "",
