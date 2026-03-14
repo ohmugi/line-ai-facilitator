@@ -238,6 +238,9 @@ liffRouter.get("/me", async (req, res) => {
 liffRouter.post("/invite/join", async (req, res) => {
   try {
     const { liffIdToken, inviteCode } = req.body;
+    if (!liffIdToken) {
+      return res.status(400).json({ error: "LINEアプリから開いてにゃ🐾" });
+    }
     const { lineUserId, displayName } = await verifyLiffToken(liffIdToken);
 
     // 招待コードで household 取得
@@ -396,29 +399,17 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
 
     const sceneText = session.scenario.scene_text;
 
-    // Step1: シナリオレベルでキャッシュ（7日間）
+    // Step1-3: emotion + intensity を踏まえた想い・考えを生成（ユーザー別、キャッシュなし）
     if (step === "step1") {
-      const cached = session.scenario.generated_content?.step1;
-      const generatedAt = session.scenario.generated_at;
-      const isValid = generatedAt &&
-        (Date.now() - new Date(generatedAt).getTime()) < 7 * 24 * 60 * 60 * 1000;
-
-      if (cached && isValid) {
-        return res.json({ options: cached, question: null, cached: true });
+      const { emotion, intensity } = req.query;
+      if (!emotion) {
+        return res.status(400).json({ error: "emotion required" });
       }
-
-      const options = await generateStep1Options({ sceneText });
-
-      // キャッシュ更新
-      const existing = session.scenario.generated_content || {};
-      await supabase
-        .from("scenes")
-        .update({
-          generated_content: { ...existing, step1: options },
-          generated_at: new Date().toISOString(),
-        })
-        .eq("id", session.scenario.id);
-
+      const options = await generateStep1Options({
+        sceneText,
+        emotion,
+        intensity: Number(intensity) || 5,
+      });
       return res.json({ options, question: null });
     }
 
@@ -431,8 +422,19 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
 
     const byStep = Object.fromEntries((answers || []).map((a) => [a.step, a.answer]));
 
+    // Step1の感情・強度・想いを統合してコンテキスト文字列化
+    const buildEmotionContext = (s1) => {
+      if (!s1) return "";
+      const { emotion, intensity, thought } = s1;
+      if (emotion && intensity && thought) {
+        const lbl = intensity <= 3 ? "少し" : intensity <= 5 ? "そこそこ" : intensity <= 7 ? "かなり" : "とても強く";
+        return `${emotion}を${lbl}（${intensity}/10）感じ、「${thought}」と思っている`;
+      }
+      return thought || emotion || "";
+    };
+
     if (step === "step2") {
-      const emotionAnswer = byStep.step1?.thought || byStep.step1?.emotion || "";
+      const emotionAnswer = buildEmotionContext(byStep.step1);
       const options = await generateStep2Options({ sceneText, emotionAnswer });
       const question = await import("../ai/generateStep2.js")
         .then((m) => m.generateStep2Question({ sceneText, emotionAnswer, userName: "あなた" }));
@@ -440,7 +442,7 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
     }
 
     if (step === "step3") {
-      const emotionAnswer = byStep.step1?.thought || byStep.step1?.emotion || "";
+      const emotionAnswer = buildEmotionContext(byStep.step1);
       const valueChoice   = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
       const options = await generateStep3Options({ sceneText, emotionAnswer, valueChoice });
       const question = await import("../ai/generateStep3.js")
@@ -449,7 +451,7 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
     }
 
     if (step === "step4") {
-      const emotionAnswer    = byStep.step1?.thought || byStep.step1?.emotion || "";
+      const emotionAnswer    = buildEmotionContext(byStep.step1);
       const valueChoice      = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
       const backgroundChoice = byStep.step3?.background || "";
       const options = await generateStep4Options({ sceneText, emotionAnswer, valueChoice, backgroundChoice });
@@ -554,7 +556,14 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
         ? session.user1?.display_name || "あなた"
         : session.user2?.display_name || "パートナー";
 
-      const emotionAnswer    = ans.step1?.thought || ans.step1?.emotion || "";
+      const s1 = ans.step1 || {};
+      const emotionAnswer = (() => {
+        if (s1.emotion && s1.intensity && s1.thought) {
+          const lbl = s1.intensity <= 3 ? "少し" : s1.intensity <= 5 ? "そこそこ" : s1.intensity <= 7 ? "かなり" : "とても強く";
+          return `${s1.emotion}を${lbl}（${s1.intensity}/10）感じ、「${s1.thought}」と思っている`;
+        }
+        return s1.thought || s1.emotion || "";
+      })();
       const valueChoice      = Array.isArray(ans.step2?.values) ? ans.step2.values.join("、") : (ans.step2?.value || "");
       const backgroundChoice = ans.step3?.background || "";
       const visionChoice     = Array.isArray(ans.step4?.priorities)

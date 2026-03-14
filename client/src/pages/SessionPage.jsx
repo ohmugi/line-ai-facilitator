@@ -1,5 +1,5 @@
 // src/pages/SessionPage.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, X, User, Users } from "lucide-react";
@@ -24,6 +24,24 @@ import { api } from "../api/client";
 import LoadingScreen from "../components/LoadingScreen";
 
 const STEPS = ["step1", "step2", "step3", "step4"];
+
+// Step1 の固定データ
+const EMOTIONS = [
+  { label: "心配・不安",    emoji: "😟" },
+  { label: "イラっとする",  emoji: "😤" },
+  { label: "悲しい・辛い",  emoji: "😢" },
+  { label: "モヤモヤする",  emoji: "😕" },
+  { label: "怖い・焦る",    emoji: "😨" },
+  { label: "特に感情はない",emoji: "😐" },
+];
+
+const INTENSITY_LEVELS = [
+  { value: 1,  label: "ほとんど感じない" },
+  { value: 3,  label: "少し感じる" },
+  { value: 5,  label: "そこそこ感じる" },
+  { value: 7,  label: "かなり感じる" },
+  { value: 10, label: "頭から離れないくらい" },
+];
 
 // ============================================================
 // ドラッグ&ドロップアイテム (Step4)
@@ -52,59 +70,79 @@ function SortableItem({ id, label, rank }) {
 // Step コンポーネント群
 // ============================================================
 
-/** Step1: 気持ち選択 + スライダー */
-function Step1({ options, onChange, value }) {
-  const [thought,   setThought]   = useState(value?.thought   || "");
-  const [intensity, setIntensity] = useState(value?.intensity || 5);
+/** Step1-1: 感情の種類選択 */
+function Step1Emotion({ value, onChange }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-500 mb-4">まず、どんな気持ちになった？</p>
+      {EMOTIONS.map(({ label, emoji }) => (
+        <button
+          key={label}
+          onClick={() => onChange(label)}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value === label ? "border-orange-400 bg-orange-50" : "border-gray-100 bg-white"}`}
+        >
+          <span className="text-2xl">{emoji}</span>
+          <span className="text-sm text-gray-700">{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    if (thought) onChange({ thought, intensity });
-  }, [thought, intensity]);
+/** Step1-2: 感情の強度選択 */
+function Step1Intensity({ emotion, value, onChange }) {
+  return (
+    <div className="space-y-3">
+      <div className="bg-orange-50 rounded-2xl px-4 py-3 mb-4">
+        <p className="text-sm text-orange-700">
+          「<span className="font-semibold">{emotion}</span>」を
+          どのくらい感じた？
+        </p>
+      </div>
+      {INTENSITY_LEVELS.map(({ value: v, label }) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          className={`w-full flex items-center justify-between p-4 rounded-xl border-2 text-left transition-colors
+            ${value === v ? "border-orange-400 bg-orange-50" : "border-gray-100 bg-white"}`}
+        >
+          <span className="text-sm text-gray-700">{label}</span>
+          <span className={`text-lg font-bold ${value === v ? "text-orange-500" : "text-gray-300"}`}>
+            {v}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
-  const intensityLabel = intensity <= 3 ? "少し" : intensity <= 6 ? "そこそこ" : "かなり";
+/** Step1-3: 想い・考え選択（AI生成） */
+function Step1Thought({ emotion, intensity, options, value, onChange }) {
+  const intensityLabel =
+    intensity <= 1 ? "ほとんど感じない" :
+    intensity <= 3 ? "少し" :
+    intensity <= 5 ? "そこそこ" :
+    intensity <= 7 ? "かなり" : "とても強く";
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        {(options || []).map((opt) => (
-          <label
-            key={opt}
-            className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors
-              ${thought === opt ? "border-orange-400 bg-orange-50" : "border-gray-100 bg-white"}`}
-          >
-            <input
-              type="radio"
-              className="accent-orange-400"
-              checked={thought === opt}
-              onChange={() => setThought(opt)}
-            />
-            <span className="text-sm text-gray-700">{opt}</span>
-          </label>
-        ))}
+    <div className="space-y-3">
+      <div className="bg-orange-50 rounded-2xl px-4 py-3 mb-4">
+        <p className="text-sm text-orange-700">
+          {emotion}を{intensityLabel}感じたんだね🐾<br />
+          そのとき、どう思った？
+        </p>
       </div>
-
-      {thought && (
-        <motion.div
-          className="bg-white rounded-2xl p-5 border border-gray-100"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      {(options || []).map((opt) => (
+        <button
+          key={opt}
+          onClick={() => onChange(opt)}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value === opt ? "border-orange-400 bg-orange-50" : "border-gray-100 bg-white"}`}
         >
-          <p className="text-sm font-medium text-gray-600 mb-3">
-            その気持ちの強さは？
-          </p>
-          <input
-            type="range" min="1" max="10"
-            value={intensity}
-            onChange={(e) => setIntensity(Number(e.target.value))}
-            className="w-full accent-orange-400"
-          />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>少し</span><span>普通</span><span>かなり</span>
-          </div>
-          <p className="text-center text-sm text-orange-500 font-medium mt-2">
-            {intensityLabel}（{intensity}/10）
-          </p>
-        </motion.div>
-      )}
+          <span className="text-sm text-gray-700">{opt}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -228,7 +266,7 @@ function Step4({ options, question, onChange, value }) {
 // ============================================================
 // パートナータブ
 // ============================================================
-function PartnerTab({ partnerAnswers, scenario }) {
+function PartnerTab({ partnerAnswers }) {
   if (!partnerAnswers?.length) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -249,12 +287,19 @@ function PartnerTab({ partnerAnswers, scenario }) {
              a.step === "step2" ? "Step2: 価値観" :
              a.step === "step3" ? "Step3: 原体験" : "Step4: 関わり方"}
           </p>
-          <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-            {JSON.stringify(a.answer, null, 2)
-              .replace(/[{}"\[\]]/g, "")
-              .replace(/,\n/g, "\n")
-              .trim()}
-          </pre>
+          {a.step === "step1" && a.answer?.emotion ? (
+            <div className="text-sm text-gray-700 space-y-1">
+              <p>感情: {a.answer.emotion}（{a.answer.intensity}/10）</p>
+              {a.answer.thought && <p>想い: {a.answer.thought}</p>}
+            </div>
+          ) : (
+            <pre className="text-sm text-gray-700 whitespace-pre-wrap">
+              {JSON.stringify(a.answer, null, 2)
+                .replace(/[{}"\[\]]/g, "")
+                .replace(/,\n/g, "\n")
+                .trim()}
+            </pre>
+          )}
         </div>
       ))}
     </div>
@@ -264,7 +309,7 @@ function PartnerTab({ partnerAnswers, scenario }) {
 // ============================================================
 // リフレクション
 // ============================================================
-function ReflectionView({ reflection, userId, user1Id, user1Name, user2Name, onHome }) {
+function ReflectionView({ reflection, userId, onHome }) {
   const myReflection      = reflection?.perUser?.[userId];
   const differenceSummary = reflection?.difference;
 
@@ -285,7 +330,7 @@ function ReflectionView({ reflection, userId, user1Id, user1Name, user2Name, onH
       {differenceSummary && (
         <div className="bg-green-50 rounded-2xl p-5 border border-green-100">
           <p className="text-xs font-medium text-green-500 mb-2">
-            ふたりの違いと共通点 💡
+            ふたりの違いと強み 💡
           </p>
           <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
             {differenceSummary}
@@ -311,15 +356,14 @@ export default function SessionPage() {
   const { sessionId }  = useParams();
   const navigate       = useNavigate();
   const user           = useAppStore((s) => s.user);
-  const partner        = useAppStore((s) => s.partner);
   const partnerAnswers = useAppStore((s) => s.partnerAnswers);
   const setPartnerAnswers = useAppStore((s) => s.setPartnerAnswers);
-  const setCurrentAnswers = useAppStore((s) => s.setCurrentAnswers);
 
   const [session,    setSession]    = useState(null);
-  const [myAnswers,  setMyAnswers]  = useState({});      // { step1: {}, step2: {}, ... }
-  const [stepIndex,  setStepIndex]  = useState(0);      // 0〜3
-  const [tab,        setTab]        = useState("me");   // "me" | "partner"
+  const [myAnswers,  setMyAnswers]  = useState({});
+  const [stepIndex,  setStepIndex]  = useState(0);
+  const [step1SubStep, setStep1SubStep] = useState(0); // 0=emotion 1=intensity 2=thought
+  const [tab,        setTab]        = useState("me");
   const [options,    setOptions]    = useState(null);
   const [question,   setQuestion]   = useState(null);
   const [loadingOpts,setLoadingOpts]= useState(false);
@@ -329,6 +373,9 @@ export default function SessionPage() {
   const [loading,    setLoading]    = useState(true);
   const [confirmExit, setConfirmExit] = useState(false);
 
+  // Step1 の一時状態（サブステップ間で保持）
+  const [step1Draft, setStep1Draft] = useState({ emotion: "", intensity: null, thought: "" });
+
   useRealtimeSession(sessionId);
 
   // セッション読み込み
@@ -336,23 +383,19 @@ export default function SessionPage() {
     api.getSession(sessionId).then(({ session, answers }) => {
       setSession(session);
 
-      // 自分の回答を復元
       const mine = answers.filter((a) => a.user_id === user?.id);
       const map  = {};
       mine.forEach((a) => { map[a.step] = a.answer; });
       setMyAnswers(map);
 
-      // パートナーの回答を復元
       const theirs = answers.filter((a) => a.user_id !== user?.id);
       setPartnerAnswers(theirs.map((a) => ({ step: a.step, answer: a.answer })));
 
-      // 完了済みリフレクションを復元
       if (session.status === "completed" && session.reflection) {
         setReflection(session.reflection);
         setShowReflection(true);
       }
 
-      // 自分の現在ステップを計算
       const completedSteps = mine.map((a) => a.step);
       const nextIdx = STEPS.findIndex((s) => !completedSteps.includes(s));
       setStepIndex(nextIdx === -1 ? 4 : nextIdx);
@@ -361,11 +404,11 @@ export default function SessionPage() {
     });
   }, [sessionId, user?.id]);
 
-  // 選択肢を取得
+  // step2〜4 の選択肢を自動取得（step1 は手動）
   useEffect(() => {
-    if (!session || stepIndex >= 4) return;
+    if (!session || stepIndex >= 4 || stepIndex === 0) return;
     const step = STEPS[stepIndex];
-    if (myAnswers[step]) return; // 回答済みは再取得しない
+    if (myAnswers[step]) return;
 
     setLoadingOpts(true);
     api.getOptions(sessionId, step, user?.id)
@@ -376,23 +419,56 @@ export default function SessionPage() {
       .finally(() => setLoadingOpts(false));
   }, [stepIndex, session?.id]);
 
-  const currentStep    = STEPS[stepIndex];
-  const currentAnswer  = myAnswers[currentStep];
-  const isCompleted    = stepIndex >= 4;
+  const currentStep   = STEPS[stepIndex];
+  const currentAnswer = myAnswers[currentStep];
+  const isCompleted   = stepIndex >= 4;
 
-  const handleAnswerChange = (answer) => {
-    setMyAnswers((prev) => ({ ...prev, [currentStep]: answer }));
-  };
+  // 「次へ」ボタンの活性判定
+  const isAnswerReady = (() => {
+    if (stepIndex === 0) {
+      if (step1SubStep === 0) return !!step1Draft.emotion;
+      if (step1SubStep === 1) return step1Draft.intensity !== null;
+      return !!step1Draft.thought;
+    }
+    return !!currentAnswer;
+  })();
 
   const handleNext = async () => {
-    if (!currentAnswer) return;
+    // Step1 サブステップの処理
+    if (stepIndex === 0) {
+      if (step1SubStep === 0) {
+        setStep1SubStep(1);
+        return;
+      }
+      if (step1SubStep === 1) {
+        // Step1-3 の選択肢を取得してから Sub-step 2 へ
+        setLoadingOpts(true);
+        try {
+          const { options } = await api.getOptions(sessionId, "step1", user?.id, {
+            emotion: step1Draft.emotion,
+            intensity: step1Draft.intensity,
+          });
+          setOptions(options);
+          setStep1SubStep(2);
+        } finally {
+          setLoadingOpts(false);
+        }
+        return;
+      }
+      // step1SubStep === 2: thought 選択済み → 保存して step2 へ
+    }
+
+    if (!isAnswerReady) return;
     setSaving(true);
     try {
-      await api.saveAnswer(sessionId, user.id, currentStep, currentAnswer);
-      setMyAnswers((prev) => ({ ...prev, [currentStep]: currentAnswer }));
+      const answerToSave = stepIndex === 0
+        ? { emotion: step1Draft.emotion, intensity: step1Draft.intensity, thought: step1Draft.thought }
+        : currentAnswer;
+
+      await api.saveAnswer(sessionId, user.id, currentStep, answerToSave);
+      setMyAnswers((prev) => ({ ...prev, [currentStep]: answerToSave }));
 
       if (stepIndex === 3) {
-        // Step4完了 → リフレクション生成
         const { reflection } = await api.completeSession(sessionId, user.id);
         setReflection(reflection);
         setShowReflection(true);
@@ -400,6 +476,8 @@ export default function SessionPage() {
       } else {
         setOptions(null);
         setQuestion(null);
+        setStep1SubStep(0);
+        setStep1Draft({ emotion: "", intensity: null, thought: "" });
         setStepIndex((i) => i + 1);
       }
     } finally {
@@ -410,10 +488,14 @@ export default function SessionPage() {
   if (loading) return <LoadingScreen />;
 
   const scenarioText = session?.scenario?.scene_text || "";
-  const stepLabel    = ["Step 1/4", "Step 2/4", "Step 3/4", "Step 4/4", "完了"][stepIndex];
   const partnerNew   = partnerAnswers.filter(
     (a) => !Object.keys(myAnswers).includes(a.step)
   ).length;
+
+  // ヘッダーラベル
+  const stepLabel = showReflection ? "リフレクション" :
+    stepIndex === 0 ? ["気持ちを選ぶ", "感じた強さ", "どう思った？"][step1SubStep] :
+    ["Step 2/4", "Step 3/4", "Step 4/4", "完了"][stepIndex - 1];
 
   // ============================================================
   // UI
@@ -425,9 +507,7 @@ export default function SessionPage() {
         <button onClick={() => setConfirmExit(true)} className="p-1">
           <ArrowLeft size={22} className="text-gray-600" />
         </button>
-        <span className="text-sm font-medium text-gray-600">
-          {showReflection ? "リフレクション" : stepLabel}
-        </span>
+        <span className="text-sm font-medium text-gray-600">{stepLabel}</span>
         <button onClick={() => setConfirmExit(true)} className="p-1">
           <X size={22} className="text-gray-400" />
         </button>
@@ -478,9 +558,6 @@ export default function SessionPage() {
               <ReflectionView
                 reflection={reflection}
                 userId={user?.id}
-                user1Id={session?.user1_id}
-                user1Name={session?.user1?.display_name}
-                user2Name={session?.user2?.display_name}
                 onHome={() => navigate("/home")}
               />
             </motion.div>
@@ -488,7 +565,7 @@ export default function SessionPage() {
             <motion.div key="partner"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             >
-              <PartnerTab partnerAnswers={partnerAnswers} scenario={session?.scenario} />
+              <PartnerTab partnerAnswers={partnerAnswers} />
             </motion.div>
           ) : loadingOpts ? (
             <motion.div key="loading"
@@ -498,14 +575,29 @@ export default function SessionPage() {
               <p className="text-sm text-gray-400">けみーが考え中にゃ…</p>
             </motion.div>
           ) : (
-            <motion.div key={currentStep}
+            <motion.div key={`${currentStep}-${step1SubStep}`}
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
             >
-              {currentStep === "step1" && (
-                <Step1
+              {currentStep === "step1" && step1SubStep === 0 && (
+                <Step1Emotion
+                  value={step1Draft.emotion}
+                  onChange={(e) => setStep1Draft((d) => ({ ...d, emotion: e }))}
+                />
+              )}
+              {currentStep === "step1" && step1SubStep === 1 && (
+                <Step1Intensity
+                  emotion={step1Draft.emotion}
+                  value={step1Draft.intensity}
+                  onChange={(v) => setStep1Draft((d) => ({ ...d, intensity: v }))}
+                />
+              )}
+              {currentStep === "step1" && step1SubStep === 2 && (
+                <Step1Thought
+                  emotion={step1Draft.emotion}
+                  intensity={step1Draft.intensity}
                   options={options}
-                  value={currentAnswer}
-                  onChange={handleAnswerChange}
+                  value={step1Draft.thought}
+                  onChange={(t) => setStep1Draft((d) => ({ ...d, thought: t }))}
                 />
               )}
               {currentStep === "step2" && (
@@ -513,7 +605,7 @@ export default function SessionPage() {
                   options={options}
                   question={question}
                   value={currentAnswer}
-                  onChange={handleAnswerChange}
+                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step2: v }))}
                 />
               )}
               {currentStep === "step3" && (
@@ -521,7 +613,7 @@ export default function SessionPage() {
                   options={options}
                   question={question}
                   value={currentAnswer}
-                  onChange={handleAnswerChange}
+                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step3: v }))}
                 />
               )}
               {currentStep === "step4" && (
@@ -529,7 +621,7 @@ export default function SessionPage() {
                   options={options}
                   question={question}
                   value={currentAnswer}
-                  onChange={handleAnswerChange}
+                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step4: v }))}
                 />
               )}
             </motion.div>
@@ -542,7 +634,7 @@ export default function SessionPage() {
         <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-100 px-4 py-4">
           <button
             onClick={handleNext}
-            disabled={!currentAnswer || saving}
+            disabled={!isAnswerReady || saving}
             className="w-full bg-orange-400 disabled:bg-gray-200 text-white disabled:text-gray-400 font-semibold py-4 rounded-2xl transition-colors"
           >
             {saving

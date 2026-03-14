@@ -50,8 +50,8 @@ export function useLiff() {
       }
     }).catch((err) => {
       console.error("[LIFF init error]", err);
-      // 開発環境用フォールバック
-      setLiff({ liffReady: true, idToken: "dev-token" });
+      // LIFF初期化失敗 - idTokenはセットしない（APIコールを防ぐ）
+      setLiff({ liffReady: true, idToken: null });
     });
   }, []);
 }
