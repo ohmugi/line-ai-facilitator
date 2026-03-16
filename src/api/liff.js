@@ -81,18 +81,29 @@ function enrichHousehold(hh) {
 /**
  * household の年齢区分に合うアクティブシナリオを全件取得し、
  * liff_sessions レコードを作成（重複なし）
+ * has_siblings が false/null の場合は requires_siblings=true のシナリオを除外
  */
-async function deliverSessions(householdId, birthYear, birthMonth) {
+async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings) {
   const ageGroup = calcAgeGroup(birthYear, birthMonth);
 
-  const { data: scenarios } = await supabase
+  let query = supabase
     .from("scenes")
-    .select("id")
+    .select("id, requires_siblings")
     .eq("is_active", true)
     .in("age_group", [ageGroup, "universal"])
-    .limit(3);
+    .limit(1);
+
+  const { data: scenarios } = await query;
 
   if (!scenarios?.length) return;
+
+  // ひとりっ子（has_siblings=false）の場合は兄弟シナリオを除外
+  const filtered = scenarios.filter((s) => {
+    if (s.requires_siblings && !hasSiblings) return false;
+    return true;
+  });
+
+  if (!filtered.length) return;
 
   // 既存セッションのシナリオIDを取得（重複作成防止）
   const { data: existing } = await supabase
@@ -102,7 +113,7 @@ async function deliverSessions(householdId, birthYear, birthMonth) {
 
   const existingIds = new Set((existing || []).map((s) => s.scenario_id));
 
-  const toInsert = scenarios
+  const toInsert = filtered
     .filter((s) => !existingIds.has(s.id))
     .map((s) => ({
       household_id: householdId,
@@ -122,7 +133,7 @@ async function deliverSessions(householdId, birthYear, birthMonth) {
 liffRouter.post("/onboarding", async (req, res) => {
   console.log("[onboarding] body:", JSON.stringify(req.body));
   try {
-    const { liffIdToken, childBirthYear, childBirthMonth } = req.body;
+    const { liffIdToken, childBirthYear, childBirthMonth, hasSiblings } = req.body;
     console.log("[onboarding] liffIdToken exists:", !!liffIdToken, "LIFF_CHANNEL_ID exists:", !!process.env.LIFF_CHANNEL_ID);
     if (!liffIdToken) {
       return res.status(400).json({ error: "LINEアプリからアクセスしてくださいにゃ🐾" });
@@ -138,18 +149,21 @@ liffRouter.post("/onboarding", async (req, res) => {
 
     if (existingUser?.household_id) {
       // 既存: 生年月を更新してセッション追加配信
+      const updateFields = {
+        child_birth_year:  childBirthYear,
+        child_birth_month: childBirthMonth,
+        updated_at: new Date().toISOString(),
+      };
+      if (hasSiblings !== undefined) updateFields.has_siblings = hasSiblings;
+
       const { data: household } = await supabase
         .from("liff_households")
-        .update({
-          child_birth_year:  childBirthYear,
-          child_birth_month: childBirthMonth,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateFields)
         .eq("id", existingUser.household_id)
         .select()
         .single();
 
-      await deliverSessions(household.id, childBirthYear, childBirthMonth);
+      await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings);
 
       return res.json({
         household: enrichHousehold(household),
@@ -159,9 +173,12 @@ liffRouter.post("/onboarding", async (req, res) => {
     }
 
     // 新規: household 作成
+    const newHouseholdData = { child_birth_year: childBirthYear, child_birth_month: childBirthMonth };
+    if (hasSiblings !== undefined) newHouseholdData.has_siblings = hasSiblings;
+
     const { data: household, error: hhErr } = await supabase
       .from("liff_households")
-      .insert({ child_birth_year: childBirthYear, child_birth_month: childBirthMonth })
+      .insert(newHouseholdData)
       .select()
       .single();
     if (hhErr) throw hhErr;
@@ -180,7 +197,7 @@ liffRouter.post("/onboarding", async (req, res) => {
     if (userErr) throw userErr;
 
     // セッション配信
-    await deliverSessions(household.id, childBirthYear, childBirthMonth);
+    await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings);
 
     res.json({
       household: enrichHousehold(household),
@@ -726,6 +743,24 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
 
     await supabase.from("liff_sessions").update(updateData).eq("id", sessionId);
 
+    // 完了したら次のシナリオを1件追加解放
+    if (session.household_id) {
+      const hh = session.liff_households || {};
+      const { data: hhData } = await supabase
+        .from("liff_households")
+        .select("child_birth_year, child_birth_month, has_siblings")
+        .eq("id", session.household_id)
+        .maybeSingle();
+      if (hhData) {
+        await deliverSessions(
+          session.household_id,
+          hhData.child_birth_year,
+          hhData.child_birth_month,
+          hhData.has_siblings
+        );
+      }
+    }
+
     res.json({
       reflection: {
         perUser:    { [userId]: myReflectionText },
@@ -734,6 +769,44 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
     });
   } catch (err) {
     console.error("[liff/sessions/:id/complete]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// PATCH /api/liff/household/settings
+// 家族設定の更新（兄弟あり/なし など）
+// ============================================================
+liffRouter.patch("/household/settings", async (req, res) => {
+  try {
+    const idToken = req.headers["x-liff-id-token"];
+    if (!idToken) return res.status(401).json({ error: "Missing LIFF token" });
+
+    const { lineUserId } = await verifyLiffToken(idToken);
+
+    const { data: user } = await supabase
+      .from("liff_users")
+      .select("household_id")
+      .eq("line_user_id", lineUserId)
+      .maybeSingle();
+
+    if (!user?.household_id) return res.status(404).json({ error: "Household not found" });
+
+    const { hasSiblings } = req.body;
+    const updates = {};
+    if (hasSiblings !== undefined) updates.has_siblings = hasSiblings;
+
+    const { data: household, error } = await supabase
+      .from("liff_households")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", user.household_id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    res.json({ household: enrichHousehold(household) });
+  } catch (err) {
+    console.error("[liff/household/settings]", err);
     res.status(500).json({ error: err.message });
   }
 });

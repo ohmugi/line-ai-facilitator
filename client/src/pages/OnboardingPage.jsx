@@ -43,10 +43,11 @@ export default function OnboardingPage() {
   const setUser     = useAppStore((s) => s.setUser);
   const setHousehold = useAppStore((s) => s.setHousehold);
 
-  const [year,    setYear]    = useState("");
-  const [month,   setMonth]   = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState(null);
+  const [year,        setYear]        = useState("");
+  const [month,       setMonth]       = useState("");
+  const [hasSiblings, setHasSiblings] = useState(null); // null=未選択, true/false
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState(null);
 
   const age      = useMemo(() => calcAge(Number(year), Number(month)), [year, month]);
   const ageGroup = useMemo(() => calcAgeGroup(Number(year), Number(month)), [year, month]);
@@ -64,6 +65,7 @@ export default function OnboardingPage() {
         idToken,
         Number(year),
         Number(month),
+        hasSiblings,
       );
       setUser(user);
       setHousehold(household);
@@ -125,6 +127,34 @@ export default function OnboardingPage() {
               <option key={m} value={m}>{m}月</option>
             ))}
           </select>
+        </div>
+
+        {/* 兄弟・姉妹 */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-600 mb-2">
+            兄弟・姉妹はいる？
+          </label>
+          <div className="flex gap-3">
+            {[
+              { value: true,  label: "いる" },
+              { value: false, label: "ひとりっこ" },
+            ].map(({ value, label }) => (
+              <button
+                key={String(value)}
+                type="button"
+                onClick={() => setHasSiblings(value)}
+                className={`flex-1 py-3 rounded-xl border-2 text-sm font-medium transition-colors
+                  ${hasSiblings === value
+                    ? "border-green-400 bg-green-50 text-green-700"
+                    : "border-gray-200 bg-gray-50 text-gray-500"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            兄弟げんかのシナリオはひとりっこには出さないにゃ
+          </p>
         </div>
 
         {/* 年齢プレビュー */}

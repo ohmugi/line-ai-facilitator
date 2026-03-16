@@ -1,7 +1,7 @@
 // src/pages/HomePage.jsx
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Copy, MessageCircle } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { api } from "../api/client";
@@ -128,6 +128,72 @@ function SessionCard({ session, userId, onPress }) {
 }
 
 // ============================================================
+// チュートリアルオーバーレイ
+// ============================================================
+const TUTORIAL_STEPS = [
+  {
+    emoji: "🐾",
+    title: "けみーへようこそ！",
+    body: "けみーは、パートナーとの子育て対話を深めるためのアプリにゃ。\nシナリオに答えながら、お互いの気持ちや価値観を発見できるにゃ🐾",
+  },
+  {
+    emoji: "💬",
+    title: "こんな流れで進むにゃ",
+    body: "①シナリオを読む\n②自分の感情・考えを4ステップで答える\n③パートナーの答えと比べてみる\n④けみーがふたりへのメッセージを届けるにゃ🐾",
+  },
+  {
+    emoji: "✨",
+    title: "シナリオは少しずつ増えるにゃ",
+    body: "最初は1つのシナリオから始まるにゃ。\n1つ終えるたびに新しいシナリオが届くにゃ🐾\nまずは最初のシナリオに挑戦してみてにゃ！",
+  },
+];
+
+function TutorialOverlay({ onDone }) {
+  const [step, setStep] = useState(0);
+  const current = TUTORIAL_STEPS[step];
+  const isLast = step === TUTORIAL_STEPS.length - 1;
+
+  return (
+    <motion.div
+      className="fixed inset-0 bg-black/50 flex items-end justify-center z-50"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+    >
+      <motion.div
+        className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-8"
+        initial={{ y: "100%" }} animate={{ y: 0 }} transition={{ type: "spring", damping: 25 }}
+      >
+        <div className="flex justify-center mb-4">
+          {TUTORIAL_STEPS.map((_, i) => (
+            <div
+              key={i}
+              className={`w-2 h-2 rounded-full mx-1 transition-colors ${i === step ? "bg-orange-400" : "bg-gray-200"}`}
+            />
+          ))}
+        </div>
+        <div className="text-center mb-6">
+          <div className="text-5xl mb-4">{current.emoji}</div>
+          <h2 className="text-lg font-bold text-gray-800 mb-3">{current.title}</h2>
+          <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{current.body}</p>
+        </div>
+        <button
+          onClick={() => {
+            if (isLast) {
+              localStorage.setItem("kemy_tutorial_seen", "1");
+              onDone();
+            } else {
+              setStep((s) => s + 1);
+            }
+          }}
+          className="w-full bg-orange-400 text-white font-semibold py-4 rounded-2xl"
+        >
+          {isLast ? "はじめる 🐾" : "次へ →"}
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ============================================================
 // ホーム画面
 // ============================================================
 
@@ -139,8 +205,19 @@ export default function HomePage() {
   const sessions   = useAppStore((s) => s.sessions);
   const setSessions = useAppStore((s) => s.setSessions);
 
+  const [showTutorial, setShowTutorial] = useState(
+    () => localStorage.getItem("kemy_tutorial_seen") !== "1"
+  );
+
   const liffId    = import.meta.env.VITE_LIFF_ID;
-  const inviteUrl = `https://liff.line.me/${liffId}?invite=${household?.invite_code}`;
+  const lineOaId  = import.meta.env.VITE_LINE_OA_ID;
+
+  // 招待URL: LINEのoaMessageリンクでbotにメッセージを送る形式
+  // VITE_LINE_OA_IDが未設定の場合はLIFFの直URLにフォールバック
+  const liffInviteUrl = `https://liff.line.me/${liffId}?invite=${household?.invite_code}`;
+  const inviteUrl = lineOaId
+    ? `https://line.me/R/oaMessage/@${lineOaId}?text=${encodeURIComponent(`join_${household?.invite_code}`)}`
+    : liffInviteUrl;
 
   const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(
     `パートナーを招待するにゃ🐾\n一緒に「けみー」をやってみよう！\n${inviteUrl}`
@@ -169,6 +246,11 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
+      {/* チュートリアルオーバーレイ（初回のみ） */}
+      <AnimatePresence>
+        {showTutorial && <TutorialOverlay onDone={() => setShowTutorial(false)} />}
+      </AnimatePresence>
+
       {/* ヘッダー */}
       <header className="bg-white px-5 py-4 flex items-center justify-between border-b border-gray-100">
         <div className="flex items-center gap-2">

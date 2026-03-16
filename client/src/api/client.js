@@ -30,8 +30,12 @@ export const api = {
     request("GET", "/me", null, idToken),
 
   /** 初回設定（生年月登録） */
-  onboarding: (liffIdToken, childBirthYear, childBirthMonth) =>
-    request("POST", "/onboarding", { liffIdToken, childBirthYear, childBirthMonth }),
+  onboarding: (liffIdToken, childBirthYear, childBirthMonth, hasSiblings) =>
+    request("POST", "/onboarding", { liffIdToken, childBirthYear, childBirthMonth, hasSiblings }),
+
+  /** 家族設定更新（兄弟あり/なし など） */
+  updateHouseholdSettings: (idToken, settings) =>
+    request("PATCH", "/household/settings", settings, idToken),
 
   /** 招待コード情報取得 */
   getInvite: (code) =>
