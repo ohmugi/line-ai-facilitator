@@ -92,13 +92,25 @@ function SortableItem({ id, label, rank }) {
 
 /** Step1-1: 感情の種類選択 */
 function Step1Emotion({ value, onChange }) {
+  const isPreset = EMOTIONS.some((e) => e.label === value);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value || ""));
+
+  const selectPreset = (label) => {
+    setFreeText("");
+    onChange(label);
+  };
+  const handleFreeText = (text) => {
+    setFreeText(text);
+    onChange(text);
+  };
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-500 mb-4">まず、どんな気持ちになった？</p>
       {EMOTIONS.map(({ label, emoji }) => (
         <button
           key={label}
-          onClick={() => onChange(label)}
+          onClick={() => selectPreset(label)}
           className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
             ${value === label ? "border-orange-400 bg-orange-50" : "border-gray-100 bg-white"}`}
         >
@@ -106,6 +118,17 @@ function Step1Emotion({ value, onChange }) {
           <span className="text-sm text-gray-700">{label}</span>
         </button>
       ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${!isPreset && value ? "border-orange-400 bg-orange-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で</p>
+        <input
+          type="text"
+          placeholder="例: ドキドキする、嬉しいような不安なような…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none"
+        />
+      </div>
     </div>
   );
 }
@@ -144,25 +167,43 @@ function Step1Thought({ emotion, intensity, options, value, onChange }) {
     intensity <= 3 ? "少し" :
     intensity <= 5 ? "そこそこ" :
     intensity <= 7 ? "かなり" : "とても強く";
+  const isNoEmotion = emotion === "特に感情はない";
+
+  const isPreset = (options || []).includes(value);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value || ""));
+
+  const selectPreset = (opt) => { setFreeText(""); onChange(opt); };
+  const handleFreeText = (text) => { setFreeText(text); onChange(text); };
 
   return (
     <div className="space-y-3">
       <div className="bg-orange-50 rounded-2xl px-4 py-3 mb-4">
         <p className="text-sm text-orange-700">
-          {emotion}を{intensityLabel}感じたんだね🐾<br />
+          {isNoEmotion ? "特に感情はなかったんだね🐾" : `${emotion}を${intensityLabel}感じたんだね🐾`}<br />
           そのとき、どう思った？
         </p>
       </div>
       {(options || []).map((opt) => (
         <button
           key={opt}
-          onClick={() => onChange(opt)}
+          onClick={() => selectPreset(opt)}
           className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
             ${value === opt ? "border-orange-400 bg-orange-50" : "border-gray-100 bg-white"}`}
         >
           <span className="text-sm text-gray-700">{opt}</span>
         </button>
       ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${!isPreset && value ? "border-orange-400 bg-orange-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で</p>
+        <textarea
+          rows={2}
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none resize-none"
+        />
+      </div>
     </div>
   );
 }
@@ -170,13 +211,19 @@ function Step1Thought({ emotion, intensity, options, value, onChange }) {
 /** Step2: チェックボックス（複数選択） */
 function Step2({ options, question, onChange, value }) {
   const [selected, setSelected] = useState(value?.values || []);
+  const [freeText, setFreeText] = useState("");
 
   const toggle = (opt) => {
     const next = selected.includes(opt)
       ? selected.filter((v) => v !== opt)
       : [...selected, opt];
     setSelected(next);
-    onChange({ values: next });
+    onChange({ values: [...next, ...(freeText ? [freeText] : [])] });
+  };
+
+  const handleFreeText = (text) => {
+    setFreeText(text);
+    onChange({ values: [...selected, ...(text ? [text] : [])] });
   };
 
   return (
@@ -201,6 +248,17 @@ function Step2({ options, question, onChange, value }) {
           <span className="text-sm text-gray-700">{opt}</span>
         </label>
       ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${freeText ? "border-green-400 bg-green-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で追加</p>
+        <input
+          type="text"
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none"
+        />
+      </div>
     </div>
   );
 }
@@ -208,10 +266,18 @@ function Step2({ options, question, onChange, value }) {
 /** Step3: 原体験選択 */
 function Step3({ options, question, onChange, value }) {
   const [background, setBackground] = useState(value?.background || "");
+  const isPreset = (options || []).includes(background);
+  const [freeText, setFreeText] = useState(isPreset ? "" : background);
 
   const handleChange = (opt) => {
+    setFreeText("");
     setBackground(opt);
     onChange({ background: opt });
+  };
+  const handleFreeText = (text) => {
+    setFreeText(text);
+    setBackground(text);
+    onChange({ background: text });
   };
 
   return (
@@ -236,6 +302,17 @@ function Step3({ options, question, onChange, value }) {
           <span className="text-sm text-gray-700">{opt}</span>
         </label>
       ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${!isPreset && background ? "border-blue-400 bg-blue-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で</p>
+        <textarea
+          rows={2}
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none resize-none"
+        />
+      </div>
     </div>
   );
 }
@@ -245,6 +322,7 @@ function Step4({ options, question, onChange, value }) {
   const [items, setItems] = useState(
     value?.priorities?.map((p) => p.value) || options || []
   );
+  const [customText, setCustomText] = useState("");
 
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -252,16 +330,26 @@ function Step4({ options, question, onChange, value }) {
     if (options && !value?.priorities) setItems(options);
   }, [options]);
 
+  const commit = (next) => {
+    setItems(next);
+    onChange({
+      priorities: next.map((v, i) => ({ rank: i + 1, value: v, importance: 10 - i * 2 })),
+    });
+  };
+
   const handleDragEnd = (event) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIdx = items.indexOf(active.id);
     const newIdx = items.indexOf(over.id);
-    const next   = arrayMove(items, oldIdx, newIdx);
-    setItems(next);
-    onChange({
-      priorities: next.map((v, i) => ({ rank: i + 1, value: v, importance: 10 - i * 2 })),
-    });
+    commit(arrayMove(items, oldIdx, newIdx));
+  };
+
+  const addCustomItem = () => {
+    const text = customText.trim();
+    if (!text || items.includes(text)) return;
+    setCustomText("");
+    commit([...items, text]);
   };
 
   return (
@@ -279,6 +367,23 @@ function Step4({ options, question, onChange, value }) {
           ))}
         </SortableContext>
       </DndContext>
+      <div className="flex gap-2 mt-3">
+        <input
+          type="text"
+          placeholder="自分の言葉を追加…"
+          value={customText}
+          onChange={(e) => setCustomText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addCustomItem()}
+          className="flex-1 text-sm border border-dashed border-gray-300 rounded-xl px-3 py-2 outline-none focus:border-purple-400"
+        />
+        <button
+          onClick={addCustomItem}
+          disabled={!customText.trim()}
+          className="text-sm px-3 py-2 rounded-xl bg-purple-100 text-purple-600 disabled:opacity-40"
+        >
+          追加
+        </button>
+      </div>
     </div>
   );
 }
@@ -289,6 +394,12 @@ function Step4({ options, question, onChange, value }) {
 
 /** Step A: 子どもの行動予測（AI生成選択肢） */
 function ChildLensStepA({ options, question, value, onChange }) {
+  const isPreset = (options || []).includes(value?.behavior);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value?.behavior || ""));
+
+  const selectPreset = (opt) => { setFreeText(""); onChange({ behavior: opt }); };
+  const handleFreeText = (text) => { setFreeText(text); onChange({ behavior: text }); };
+
   return (
     <div className="space-y-3">
       {question && (
@@ -299,19 +410,36 @@ function ChildLensStepA({ options, question, value, onChange }) {
       {(options || []).map((opt) => (
         <button
           key={opt}
-          onClick={() => onChange({ behavior: opt })}
+          onClick={() => selectPreset(opt)}
           className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
             ${value?.behavior === opt ? "border-sky-400 bg-sky-50" : "border-gray-100 bg-white"}`}
         >
           <span className="text-sm text-gray-700">{opt}</span>
         </button>
       ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${!isPreset && value?.behavior ? "border-sky-400 bg-sky-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で</p>
+        <textarea
+          rows={2}
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none resize-none"
+        />
+      </div>
     </div>
   );
 }
 
 /** Step B: 根拠の性質（固定選択肢） */
 function ChildLensStepB({ question, value, onChange }) {
+  const isPreset = CHILD_LENS_REASON_TYPES.includes(value?.reasonType);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value?.reasonType || ""));
+
+  const selectPreset = (opt) => { setFreeText(""); onChange({ reasonType: opt }); };
+  const handleFreeText = (text) => { setFreeText(text); onChange({ reasonType: text }); };
+
   return (
     <div className="space-y-3">
       {question && (
@@ -322,19 +450,36 @@ function ChildLensStepB({ question, value, onChange }) {
       {CHILD_LENS_REASON_TYPES.map((opt) => (
         <button
           key={opt}
-          onClick={() => onChange({ reasonType: opt })}
+          onClick={() => selectPreset(opt)}
           className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
             ${value?.reasonType === opt ? "border-amber-400 bg-amber-50" : "border-gray-100 bg-white"}`}
         >
           <span className="text-sm text-gray-700">{opt}</span>
         </button>
       ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${!isPreset && value?.reasonType ? "border-amber-400 bg-amber-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で</p>
+        <input
+          type="text"
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none"
+        />
+      </div>
     </div>
   );
 }
 
 /** Step C: 感情反応（固定選択肢） */
 function ChildLensStepC({ question, value, onChange }) {
+  const isPreset = CHILD_LENS_FEELINGS.some((f) => f.label === value?.feeling);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value?.feeling || ""));
+
+  const selectPreset = (label) => { setFreeText(""); onChange({ feeling: label }); };
+  const handleFreeText = (text) => { setFreeText(text); onChange({ feeling: text }); };
+
   return (
     <div className="space-y-3">
       {question && (
@@ -345,7 +490,7 @@ function ChildLensStepC({ question, value, onChange }) {
       {CHILD_LENS_FEELINGS.map(({ label, emoji }) => (
         <button
           key={label}
-          onClick={() => onChange({ feeling: label })}
+          onClick={() => selectPreset(label)}
           className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
             ${value?.feeling === label ? "border-rose-400 bg-rose-50" : "border-gray-100 bg-white"}`}
         >
@@ -353,12 +498,29 @@ function ChildLensStepC({ question, value, onChange }) {
           <span className="text-sm text-gray-700">{label}</span>
         </button>
       ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${!isPreset && value?.feeling ? "border-rose-400 bg-rose-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で</p>
+        <input
+          type="text"
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none"
+        />
+      </div>
     </div>
   );
 }
 
 /** Step D: 理想像（AI生成選択肢） */
 function ChildLensStepD({ options, question, value, onChange }) {
+  const isPreset = (options || []).includes(value?.ideal);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value?.ideal || ""));
+
+  const selectPreset = (opt) => { setFreeText(""); onChange({ ideal: opt }); };
+  const handleFreeText = (text) => { setFreeText(text); onChange({ ideal: text }); };
+
   return (
     <div className="space-y-3">
       {question && (
@@ -369,13 +531,24 @@ function ChildLensStepD({ options, question, value, onChange }) {
       {(options || []).map((opt) => (
         <button
           key={opt}
-          onClick={() => onChange({ ideal: opt })}
+          onClick={() => selectPreset(opt)}
           className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
             ${value?.ideal === opt ? "border-violet-400 bg-violet-50" : "border-gray-100 bg-white"}`}
         >
           <span className="text-sm text-gray-700">{opt}</span>
         </button>
       ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${!isPreset && value?.ideal ? "border-violet-400 bg-violet-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で</p>
+        <textarea
+          rows={2}
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none resize-none"
+        />
+      </div>
     </div>
   );
 }
@@ -727,6 +900,22 @@ export default function SessionPage() {
     // ── 親目線: Step1 サブステップの処理 ──
     if (stepIndex === 0) {
       if (step1SubStep === 0) {
+        // 「特に感情はない」は強度ステップをスキップして想いへ
+        if (step1Draft.emotion === "特に感情はない") {
+          setLoadingOpts(true);
+          try {
+            const { options } = await api.getOptions(sessionId, "step1", user?.id, {
+              emotion: step1Draft.emotion,
+              intensity: 0,
+            });
+            setOptions(options);
+            setStep1Draft((d) => ({ ...d, intensity: 0 }));
+            setStep1SubStep(2);
+          } finally {
+            setLoadingOpts(false);
+          }
+          return;
+        }
         setStep1SubStep(1);
         return;
       }

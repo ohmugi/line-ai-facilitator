@@ -91,7 +91,7 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings) 
     .select("id, requires_siblings")
     .eq("is_active", true)
     .in("age_group", [ageGroup, "universal"])
-    .limit(3);
+    .limit(1);
 
   const { data: scenarios } = await query;
 
@@ -742,6 +742,24 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
     }
 
     await supabase.from("liff_sessions").update(updateData).eq("id", sessionId);
+
+    // 完了したら次のシナリオを1件追加解放
+    if (session.household_id) {
+      const hh = session.liff_households || {};
+      const { data: hhData } = await supabase
+        .from("liff_households")
+        .select("child_birth_year, child_birth_month, has_siblings")
+        .eq("id", session.household_id)
+        .maybeSingle();
+      if (hhData) {
+        await deliverSessions(
+          session.household_id,
+          hhData.child_birth_year,
+          hhData.child_birth_month,
+          hhData.has_siblings
+        );
+      }
+    }
 
     res.json({
       reflection: {

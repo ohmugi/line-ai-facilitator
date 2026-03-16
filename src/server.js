@@ -317,6 +317,89 @@ if (event.type === "follow") {
   continue;
 }
 
+// =============================
+// 招待コード処理: "join_XXXX"
+// inviteURL経由でbotにメッセージを送った招待ユーザーの紐づけ
+// =============================
+if (
+  event.type === "message" &&
+  event.message?.type === "text" &&
+  event.message.text.trim().startsWith("join_")
+) {
+  const inviteCode = event.message.text.trim().slice(5);
+  console.log("[INVITE] join_ received, code:", inviteCode);
+
+  const { data: household } = await supabase
+    .from("liff_households")
+    .select("id, invite_code")
+    .eq("invite_code", inviteCode)
+    .maybeSingle();
+
+  if (!household) {
+    await replyText(replyToken, "招待コードが見つからなかったにゃ😿\nもう一度確認してにゃ🐾");
+    continue;
+  }
+
+  const lineUserId = source.userId;
+  const profile    = await getLineProfile(lineUserId);
+  const displayName = profile?.displayName || "あなた";
+
+  // 既存ユーザー確認
+  const { data: existingUser } = await supabase
+    .from("liff_users")
+    .select("id, household_id")
+    .eq("line_user_id", lineUserId)
+    .maybeSingle();
+
+  if (existingUser?.household_id && existingUser.household_id !== household.id) {
+    await replyText(replyToken, "すでに別の家族と繋がっているにゃ🐾");
+    continue;
+  }
+
+  if (!existingUser) {
+    await supabase.from("liff_users").insert({
+      line_user_id: lineUserId,
+      household_id: household.id,
+      display_name: displayName,
+      role: "invitee",
+    });
+  } else if (!existingUser.household_id) {
+    await supabase
+      .from("liff_users")
+      .update({ household_id: household.id, role: "invitee" })
+      .eq("id", existingUser.id);
+  }
+
+  // liff_sessions の user2_id を設定（未設定のもの）
+  const { data: newUser } = await supabase
+    .from("liff_users")
+    .select("id")
+    .eq("line_user_id", lineUserId)
+    .maybeSingle();
+  if (newUser) {
+    await supabase
+      .from("liff_sessions")
+      .update({ user2_id: newUser.id })
+      .eq("household_id", household.id)
+      .is("user2_id", null);
+  }
+
+  // 招待者の名前を取得
+  const { data: inviter } = await supabase
+    .from("liff_users")
+    .select("display_name")
+    .eq("household_id", household.id)
+    .eq("role", "inviter")
+    .maybeSingle();
+  const inviterName = inviter?.display_name || "パートナー";
+
+  const liffId = process.env.LIFF_ID;
+  const replyMsg = `${inviterName}さんと繋がったにゃ🐾\nリッチメニューからけみーを開いてみてにゃ！\nhttps://liff.line.me/${liffId}`;
+  await replyText(replyToken, replyMsg);
+  console.log("[INVITE] joined household:", household.id, "user:", displayName);
+  continue;
+}
+
       // =============================
       // セッション開始（postback / はじめる）
       // =============================
