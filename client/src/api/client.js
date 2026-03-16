@@ -66,4 +66,8 @@ export const api = {
   /** セッション完了・リフレクション生成 */
   completeSession: (sessionId, userId) =>
     request("POST", `/sessions/${sessionId}/complete`, { userId }),
+
+  /** アカウントをリセット（ユーザー・世帯・セッション・回答をすべて削除） */
+  resetAccount: (idToken) =>
+    request("DELETE", "/me", null, idToken),
 };

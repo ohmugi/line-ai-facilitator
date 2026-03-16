@@ -194,6 +194,72 @@ function TutorialOverlay({ onDone }) {
 }
 
 // ============================================================
+// アカウントリセットボタン（テスト用）
+// ============================================================
+
+function ResetAccountButton() {
+  const idToken = useAppStore((s) => s.idToken);
+  const setUser = useAppStore((s) => s.setUser);
+  const setHousehold = useAppStore((s) => s.setHousehold);
+  const setPartner = useAppStore((s) => s.setPartner);
+  const setSessions = useAppStore((s) => s.setSessions);
+  const [confirm, setConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleReset() {
+    setLoading(true);
+    try {
+      await api.resetAccount(idToken);
+      // ストアをクリアしてオンボーディングに戻す
+      setUser(null);
+      setHousehold(null);
+      setPartner(null);
+      setSessions([]);
+      localStorage.removeItem("kemy_tutorial_seen");
+    } catch (err) {
+      alert(`リセット失敗: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (confirm) {
+    return (
+      <div className="mt-8 p-4 bg-red-50 rounded-2xl border border-red-100 text-center">
+        <p className="text-sm text-red-700 font-semibold mb-1">本当にリセットしますか？</p>
+        <p className="text-xs text-red-500 mb-3">世帯・セッション・回答がすべて削除されます</p>
+        <div className="flex gap-2 justify-center">
+          <button
+            onClick={handleReset}
+            disabled={loading}
+            className="px-4 py-2 bg-red-500 text-white text-xs rounded-xl font-medium disabled:opacity-50"
+          >
+            {loading ? "削除中…" : "リセットする"}
+          </button>
+          <button
+            onClick={() => setConfirm(false)}
+            className="px-4 py-2 border border-gray-300 text-gray-600 text-xs rounded-xl"
+          >
+            キャンセル
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8 text-center">
+      <button
+        onClick={() => setConfirm(true)}
+        className="text-xs text-gray-300 underline"
+      >
+        最初からやり直す
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
 // ホーム画面
 // ============================================================
 
@@ -310,6 +376,9 @@ export default function HomePage() {
             ))}
           </div>
         )}
+
+        {/* リセットボタン（テスト用） */}
+        <ResetAccountButton />
       </div>
     </div>
   );
