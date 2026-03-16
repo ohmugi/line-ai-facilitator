@@ -841,6 +841,61 @@ liffRouter.get("/invite/:code", async (req, res) => {
 });
 
 // ============================================================
+// DELETE /api/liff/me
+// アカウントをリセット（ユーザー・世帯・セッション・回答をすべて削除）
+// ============================================================
+liffRouter.delete("/me", async (req, res) => {
+  try {
+    const idToken = req.headers["x-liff-id-token"];
+    if (!idToken) return res.status(401).json({ error: "Missing LIFF token" });
+
+    const { lineUserId } = await verifyLiffToken(idToken);
+
+    const { data: user } = await supabase
+      .from("liff_users")
+      .select("id, household_id")
+      .eq("line_user_id", lineUserId)
+      .maybeSingle();
+
+    if (!user) return res.json({ ok: true });
+
+    const householdId = user.household_id;
+
+    if (householdId) {
+      // セッションID一覧を取得
+      const { data: sessions } = await supabase
+        .from("liff_sessions")
+        .select("id")
+        .eq("household_id", householdId);
+
+      const sessionIds = (sessions || []).map((s) => s.id);
+
+      // 回答を削除
+      if (sessionIds.length > 0) {
+        await supabase.from("liff_answers").delete().in("session_id", sessionIds);
+      }
+
+      // セッションを削除
+      await supabase.from("liff_sessions").delete().eq("household_id", householdId);
+
+      // 世帯内の全ユーザーを削除
+      await supabase.from("liff_users").delete().eq("household_id", householdId);
+
+      // 世帯を削除
+      await supabase.from("liff_households").delete().eq("id", householdId);
+    } else {
+      // 世帯未設定のユーザーのみ削除
+      await supabase.from("liff_users").delete().eq("id", user.id);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[liff/me DELETE]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
 // 夫婦の違いサマリー生成（内部関数）
 // ============================================================
 async function generateCoupleDifference({ sceneText, user1Name, user1Answers, user2Name, user2Answers }) {
