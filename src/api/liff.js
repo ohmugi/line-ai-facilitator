@@ -101,7 +101,7 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings) 
   // 年齢対象のアクティブシナリオを全件取得
   const { data: allScenes } = await supabase
     .from("scenes")
-    .select("id, requires_siblings, category, is_starter")
+    .select("id, requires_siblings, category")
     .eq("is_active", true)
     .in("age_group", ageGroups);
 
@@ -118,8 +118,18 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings) 
 
   let selected;
   if (isFirst) {
-    // 初回: is_starter=true のシナリオを優先、なければ先頭
-    selected = candidates.find((s) => s.is_starter) ?? candidates[0];
+    // 初回: is_starter=true のシナリオを優先（カラム未存在時はフォールバック）
+    let starterId = null;
+    try {
+      const { data: starters } = await supabase
+        .from("scenes")
+        .select("id")
+        .eq("is_starter", true)
+        .in("age_group", ageGroups)
+        .limit(1);
+      starterId = starters?.[0]?.id ?? null;
+    } catch { /* is_starter 未マイグレーション時は無視 */ }
+    selected = (starterId ? candidates.find((c) => c.id === starterId) : null) ?? candidates[0];
   } else {
     // 2回目以降: 同カテゴリ回避 ＋ ランダム
     const diffCategory = candidates.filter((s) => s.category !== lastCategory);
@@ -365,7 +375,7 @@ liffRouter.get("/sessions", async (req, res) => {
 
     // ユーザー別の回答ステップ情報を付加
     const enriched = await Promise.all(
-      sessions.map(async (s) => {
+      (sessions || []).map(async (s) => {
         const { data: answers } = await supabase
           .from("session_answers")
           .select("user_id, step")

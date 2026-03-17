@@ -13,10 +13,14 @@ export default function InviteAcceptPage({ inviteCode }) {
   const setHousehold = useAppStore((s) => s.setHousehold);
   const setPartner  = useAppStore((s) => s.setPartner);
 
-  const [inviter, setInviter] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [joining, setJoining] = useState(false);
-  const [error,   setError]   = useState(null);
+  const [inviter,  setInviter]  = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [joining,  setJoining]  = useState(false);
+  const [joined,   setJoined]   = useState(false);
+  const [error,    setError]    = useState(null);
+
+  const lineOaId     = import.meta.env.VITE_LINE_OA_ID;
+  const addFriendUrl = lineOaId ? `https://line.me/R/ti/p/@${lineOaId}` : null;
 
   useEffect(() => {
     api.getInvite(inviteCode)
@@ -33,7 +37,7 @@ export default function InviteAcceptPage({ inviteCode }) {
       setUser(user);
       setHousehold(household);
       setPartner(partner);
-      navigate("/home");
+      setJoined(true);
     } catch (err) {
       setError(err.message);
       setJoining(false);
@@ -41,6 +45,49 @@ export default function InviteAcceptPage({ inviteCode }) {
   };
 
   if (loading) return <LoadingScreen />;
+
+  // 参加完了 → 友だち追加を促してからホームへ
+  if (joined) {
+    return (
+      <motion.div
+        className="flex flex-col items-center justify-center min-h-screen px-6 gap-5"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <span className="text-6xl">🎉</span>
+        <h1 className="text-xl font-bold text-gray-800 text-center">
+          {inviter ? `${inviter}さんと繋がったにゃ🐾` : "参加完了にゃ🐾"}
+        </h1>
+
+        {addFriendUrl ? (
+          <>
+            <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-100 text-sm text-yellow-800 text-center leading-relaxed">
+              けみーをいつでも開けるよう、<br />LINE公式アカウントを友だち追加しておくにゃ🐾<br />
+              <span className="text-xs text-yellow-600">（リッチメニューからアクセスできるようになるにゃ）</span>
+            </div>
+            <a href={addFriendUrl} className="w-full max-w-xs">
+              <button className="w-full bg-green-500 text-white font-semibold py-4 rounded-2xl">
+                友だち追加する
+              </button>
+            </a>
+            <button
+              onClick={() => navigate("/home")}
+              className="text-xs text-gray-400 underline"
+            >
+              あとでやる → ホームへ
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => navigate("/home")}
+            className="w-full max-w-xs bg-green-500 text-white font-semibold py-4 rounded-2xl"
+          >
+            ホームへ →
+          </button>
+        )}
+      </motion.div>
+    );
+  }
 
   if (!idToken) {
     return (
