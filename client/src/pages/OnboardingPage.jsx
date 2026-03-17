@@ -1,7 +1,7 @@
 // src/pages/OnboardingPage.jsx
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore } from "../stores/appStore";
 import { api } from "../api/client";
 
@@ -42,12 +42,41 @@ export default function OnboardingPage() {
   const idToken     = useAppStore((s) => s.idToken);
   const setUser     = useAppStore((s) => s.setUser);
   const setHousehold = useAppStore((s) => s.setHousehold);
+  const setPartner   = useAppStore((s) => s.setPartner);
 
   const [year,        setYear]        = useState("");
   const [month,       setMonth]       = useState("");
   const [hasSiblings, setHasSiblings] = useState(null); // null=未選択, true/false
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState(null);
+
+  // 招待コード入力モード
+  const [showCodeEntry, setShowCodeEntry] = useState(false);
+  const [inviteCode,    setInviteCode]    = useState("");
+  const [codeLoading,   setCodeLoading]   = useState(false);
+  const [codeError,     setCodeError]     = useState(null);
+
+  const handleJoinByCode = async () => {
+    const code = inviteCode.trim();
+    if (!code) return;
+    if (!idToken) {
+      setCodeError("LINEアプリから開いてくださいにゃ🐾");
+      return;
+    }
+    setCodeLoading(true);
+    setCodeError(null);
+    try {
+      const { user, household, partner } = await api.joinInvite(idToken, code);
+      setUser(user);
+      setHousehold(household);
+      setPartner(partner);
+      navigate("/home");
+    } catch (err) {
+      setCodeError(err.message);
+    } finally {
+      setCodeLoading(false);
+    }
+  };
 
   const age      = useMemo(() => calcAge(Number(year), Number(month)), [year, month]);
   const ageGroup = useMemo(() => calcAgeGroup(Number(year), Number(month)), [year, month]);
@@ -89,6 +118,46 @@ export default function OnboardingPage() {
         <h1 className="mt-3 text-xl font-bold text-gray-800">けみーにゃ</h1>
         <p className="mt-1 text-sm text-gray-500">夫婦の対話をちょっとだけ深めるにゃ</p>
       </div>
+
+      {/* 招待コード入力モード */}
+      <AnimatePresence>
+        {showCodeEntry && (
+          <motion.div
+            className="bg-white rounded-2xl shadow-sm p-6 mb-4"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <h2 className="text-base font-semibold text-gray-700 mb-1">招待コードで参加にゃ🐾</h2>
+            <p className="text-xs text-gray-400 mb-4">パートナーから受け取ったコードを入力してにゃ</p>
+            <input
+              type="text"
+              placeholder="例: a1b2c3d4"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.trim())}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-800 bg-gray-50 font-mono text-center tracking-widest mb-3 focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+            {codeError && (
+              <p className="text-red-500 text-xs mb-3 text-center">{codeError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleJoinByCode}
+                disabled={!inviteCode.trim() || codeLoading}
+                className="flex-1 bg-green-500 disabled:bg-gray-200 text-white disabled:text-gray-400 font-semibold py-3 rounded-xl"
+              >
+                {codeLoading ? "参加中にゃ…" : "参加する"}
+              </button>
+              <button
+                onClick={() => { setShowCodeEntry(false); setCodeError(null); }}
+                className="px-4 border border-gray-200 text-gray-500 rounded-xl text-sm"
+              >
+                戻る
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* カード */}
       <div className="bg-white rounded-2xl shadow-sm p-6 flex-1">
@@ -184,6 +253,16 @@ export default function OnboardingPage() {
         >
           {loading ? "設定中にゃ…" : "次へ →"}
         </button>
+
+        {!showCodeEntry && (
+          <button
+            type="button"
+            onClick={() => setShowCodeEntry(true)}
+            className="w-full mt-3 text-xs text-gray-400 underline py-2"
+          >
+            招待コードを受け取った方はこちら
+          </button>
+        )}
       </div>
     </motion.div>
   );

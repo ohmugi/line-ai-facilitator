@@ -274,25 +274,42 @@ export default function HomePage() {
   const [showTutorial, setShowTutorial] = useState(
     () => localStorage.getItem("kemy_tutorial_seen") !== "1"
   );
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [sessionError,    setSessionError]    = useState(null);
+  const [copiedCode,      setCopiedCode]      = useState(false);
 
-  const liffId    = import.meta.env.VITE_LIFF_ID;
-  const lineOaId  = import.meta.env.VITE_LINE_OA_ID;
+  const liffId   = import.meta.env.VITE_LIFF_ID;
+  const lineOaId = import.meta.env.VITE_LINE_OA_ID;
 
-  // 招待URL: LINEのoaMessageリンクでbotにメッセージを送る形式
-  // VITE_LINE_OA_IDが未設定の場合はLIFFの直URLにフォールバック
-  const liffInviteUrl = `https://liff.line.me/${liffId}?invite=${household?.invite_code}`;
-  const inviteUrl = lineOaId
-    ? `https://line.me/R/oaMessage/@${lineOaId}?text=${encodeURIComponent(`join_${household?.invite_code}`)}`
+  const inviteCode    = household?.invite_code ?? "";
+  const liffInviteUrl = `https://liff.line.me/${liffId}?invite=${inviteCode}`;
+  const inviteUrl     = lineOaId
+    ? `https://line.me/R/oaMessage/@${lineOaId}?text=${encodeURIComponent(`join_${inviteCode}`)}`
     : liffInviteUrl;
-
-  const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(
-    `パートナーを招待するにゃ🐾\n一緒に「けみー」をやってみよう！\n${inviteUrl}`
+  const lineShareUrl  = `https://line.me/R/msg/text/?${encodeURIComponent(
+    `パートナーを招待するにゃ🐾\n招待コード: ${inviteCode}\n一緒に「けみー」をやってみよう！\n${inviteUrl}`
   )}`;
+  const addFriendUrl  = lineOaId ? `https://line.me/R/ti/p/@${lineOaId}` : null;
+
+  function copyCode() {
+    navigator.clipboard.writeText(inviteCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  }
+
+  function fetchSessions() {
+    if (!household?.id) return;
+    setLoadingSessions(true);
+    setSessionError(null);
+    api.getSessions(household.id)
+      .then(({ sessions }) => setSessions(sessions))
+      .catch((err) => setSessionError(err.message))
+      .finally(() => setLoadingSessions(false));
+  }
 
   // セッション一覧取得
   useEffect(() => {
-    if (!household?.id) return;
-    api.getSessions(household.id).then(({ sessions }) => setSessions(sessions));
+    fetchSessions();
   }, [household?.id]);
 
   // Realtime でセッション状態を自動更新
@@ -304,7 +321,9 @@ export default function HomePage() {
         event: "*", schema: "public", table: "liff_sessions",
         filter: `household_id=eq.${household.id}`,
       }, () => {
-        api.getSessions(household.id).then(({ sessions }) => setSessions(sessions));
+        api.getSessions(household.id)
+          .then(({ sessions }) => setSessions(sessions))
+          .catch(() => {});
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -338,9 +357,25 @@ export default function HomePage() {
             <p className="text-sm font-semibold text-green-700 mb-1">
               📨 パートナーを招待しよう
             </p>
-            <p className="text-xs text-green-600 mb-3">
+            <p className="text-xs text-green-600 mb-1">
               一緒にやるとお互いの答えが比べられるにゃ🐾
             </p>
+
+            {/* 招待コード表示 */}
+            <div className="bg-white rounded-xl px-3 py-2 mb-3 flex items-center justify-between border border-green-200">
+              <div>
+                <p className="text-xs text-gray-400">招待コード</p>
+                <p className="font-mono font-bold text-green-700 text-base tracking-widest">{inviteCode}</p>
+              </div>
+              <button
+                onClick={copyCode}
+                className="flex items-center gap-1 text-xs text-green-600 border border-green-300 rounded-lg px-2 py-1"
+              >
+                <Copy size={12} />
+                {copiedCode ? "コピー済み✓" : "コピー"}
+              </button>
+            </div>
+
             <div className="flex gap-2">
               <a href={lineShareUrl} className="flex-1">
                 <button className="w-full flex items-center justify-center gap-1 bg-green-500 text-white text-xs font-medium py-2 rounded-xl">
@@ -348,21 +383,35 @@ export default function HomePage() {
                   LINEで送る
                 </button>
               </a>
-              <button
-                onClick={() => navigator.clipboard.writeText(inviteUrl)}
-                className="flex-1 flex items-center justify-center gap-1 border border-green-300 text-green-600 text-xs font-medium py-2 rounded-xl"
-              >
-                <Copy size={14} />
-                URLをコピー
-              </button>
+              {addFriendUrl && (
+                <a href={addFriendUrl} className="flex-1">
+                  <button className="w-full flex items-center justify-center gap-1 border border-green-300 text-green-600 text-xs font-medium py-2 rounded-xl">
+                    友だち追加
+                  </button>
+                </a>
+              )}
             </div>
           </motion.div>
         )}
 
         {/* セッション一覧 */}
-        {sessions.length === 0 ? (
+        {loadingSessions ? (
           <div className="text-center text-gray-400 text-sm py-16">
             シナリオを読み込み中にゃ…
+          </div>
+        ) : sessionError ? (
+          <div className="text-center py-16">
+            <p className="text-gray-400 text-sm mb-3">読み込みに失敗したにゃ😿</p>
+            <button
+              onClick={fetchSessions}
+              className="text-xs text-green-600 border border-green-300 rounded-xl px-4 py-2"
+            >
+              再試行にゃ
+            </button>
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="text-center text-gray-400 text-sm py-16">
+            シナリオの準備中にゃ…少し待ってにゃ🐾
           </div>
         ) : (
           <div className="flex flex-col gap-3">
