@@ -7,6 +7,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -66,7 +67,7 @@ const INTENSITY_LEVELS = [
 // ============================================================
 // ドラッグ&ドロップアイテム (Step4)
 // ============================================================
-function SortableItem({ id, label, rank }) {
+function SortableItem({ id, label, rank, onDelete, canDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
 
@@ -74,14 +75,27 @@ function SortableItem({ id, label, rank }) {
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      {...attributes}
-      {...listeners}
-      className={`flex items-center gap-3 bg-white rounded-xl px-4 py-3 border mb-2 cursor-grab
+      className={`flex items-center gap-3 bg-white rounded-xl px-4 py-3 border mb-2
         ${isDragging ? "shadow-lg border-orange-300" : "border-gray-100 shadow-sm"}`}
     >
       <span className="text-lg font-bold text-orange-400 w-6">{rank}.</span>
-      <span className="text-sm text-gray-700 flex-1">{label}</span>
-      <span className="text-gray-300">⠿</span>
+      <span
+        className="text-sm text-gray-700 flex-1 cursor-grab"
+        {...attributes}
+        {...listeners}
+      >
+        {label}
+      </span>
+      <span className="text-gray-300 cursor-grab" {...attributes} {...listeners}>⠿</span>
+      {canDelete && (
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onDelete(id)}
+          className="text-gray-300 hover:text-red-400 text-lg leading-none ml-1"
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }
@@ -324,10 +338,18 @@ function Step4({ options, question, onChange, value }) {
   );
   const [customText, setCustomText] = useState("");
 
-  const sensors = useSensors(useSensor(PointerSensor));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  );
 
   useEffect(() => {
-    if (options && !value?.priorities) setItems(options);
+    if (options && !value?.priorities) {
+      setItems(options);
+      onChange({
+        priorities: options.map((v, i) => ({ rank: i + 1, value: v, importance: 10 - i * 2 })),
+      });
+    }
   }, [options]);
 
   const commit = (next) => {
@@ -352,6 +374,10 @@ function Step4({ options, question, onChange, value }) {
     commit([...items, text]);
   };
 
+  const deleteItem = (id) => {
+    commit(items.filter((item) => item !== id));
+  };
+
   return (
     <div>
       {question && (
@@ -359,11 +385,18 @@ function Step4({ options, question, onChange, value }) {
           <p className="text-sm text-purple-700">{question}</p>
         </div>
       )}
-      <p className="text-xs text-gray-400 mb-3">ドラッグして優先順位を変えてにゃ</p>
+      <p className="text-xs text-gray-400 mb-3">長押しorドラッグで順番を変えてにゃ</p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={items} strategy={verticalListSortingStrategy}>
           {items.map((item, idx) => (
-            <SortableItem key={item} id={item} label={item} rank={idx + 1} />
+            <SortableItem
+              key={item}
+              id={item}
+              label={item}
+              rank={idx + 1}
+              onDelete={deleteItem}
+              canDelete={items.length > 1}
+            />
           ))}
         </SortableContext>
       </DndContext>
