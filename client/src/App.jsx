@@ -1,6 +1,6 @@
 // src/App.jsx
 import { Component } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { useLiff } from "./hooks/useLiff";
 import { useAppStore } from "./stores/appStore";
 
@@ -34,11 +34,12 @@ function AppRoutes() {
   const user      = useAppStore((s) => s.user);
   const household = useAppStore((s) => s.household);
 
+  const [searchParams] = useSearchParams();
+
   if (!liffReady) return <LoadingScreen />;
 
   // 招待URL経由かどうかを URLパラメータで判断
-  const params     = new URLSearchParams(window.location.search);
-  const inviteCode = params.get("invite");
+  const inviteCode = searchParams.get("invite");
 
   if (inviteCode) {
     return (
