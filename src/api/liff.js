@@ -85,45 +85,53 @@ function enrichHousehold(hh) {
  */
 async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings) {
   const ageGroup = calcAgeGroup(birthYear, birthMonth);
+  const ageGroups = ageGroup === "universal" ? ["universal"] : [ageGroup, "universal"];
 
-  let query = supabase
+  // 配信済みセッション（最新順）と最後のカテゴリを取得
+  const { data: existing } = await supabase
+    .from("liff_sessions")
+    .select("scenario_id, scenario:scenes(category)")
+    .eq("household_id", householdId)
+    .order("delivered_at", { ascending: false });
+
+  const existingIds = new Set((existing || []).map((s) => s.scenario_id));
+  const isFirst = existingIds.size === 0;
+  const lastCategory = existing?.[0]?.scenario?.category ?? null;
+
+  // 年齢対象のアクティブシナリオを全件取得
+  const { data: allScenes } = await supabase
     .from("scenes")
-    .select("id, requires_siblings")
+    .select("id, requires_siblings, category, is_starter")
     .eq("is_active", true)
-    .in("age_group", [ageGroup, "universal"])
-    .limit(1);
+    .in("age_group", ageGroups);
 
-  const { data: scenarios } = await query;
+  if (!allScenes?.length) return;
 
-  if (!scenarios?.length) return;
-
-  // ひとりっ子（has_siblings=false）の場合は兄弟シナリオを除外
-  const filtered = scenarios.filter((s) => {
+  // ひとりっ子フィルタ ＋ 配信済み除外
+  const candidates = allScenes.filter((s) => {
     if (s.requires_siblings && !hasSiblings) return false;
+    if (existingIds.has(s.id)) return false;
     return true;
   });
 
-  if (!filtered.length) return;
+  if (!candidates.length) return;
 
-  // 既存セッションのシナリオIDを取得（重複作成防止）
-  const { data: existing } = await supabase
-    .from("liff_sessions")
-    .select("scenario_id")
-    .eq("household_id", householdId);
-
-  const existingIds = new Set((existing || []).map((s) => s.scenario_id));
-
-  const toInsert = filtered
-    .filter((s) => !existingIds.has(s.id))
-    .map((s) => ({
-      household_id: householdId,
-      scenario_id: s.id,
-      status: "new",
-    }));
-
-  if (toInsert.length > 0) {
-    await supabase.from("liff_sessions").insert(toInsert);
+  let selected;
+  if (isFirst) {
+    // 初回: is_starter=true のシナリオを優先、なければ先頭
+    selected = candidates.find((s) => s.is_starter) ?? candidates[0];
+  } else {
+    // 2回目以降: 同カテゴリ回避 ＋ ランダム
+    const diffCategory = candidates.filter((s) => s.category !== lastCategory);
+    const pool = diffCategory.length > 0 ? diffCategory : candidates;
+    selected = pool[Math.floor(Math.random() * pool.length)];
   }
+
+  await supabase.from("liff_sessions").insert({
+    household_id: householdId,
+    scenario_id: selected.id,
+    status: "new",
+  });
 }
 
 // ============================================================
