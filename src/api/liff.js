@@ -83,7 +83,7 @@ function enrichHousehold(hh) {
  * liff_sessions レコードを作成（重複なし）
  * has_siblings が false/null の場合は requires_siblings=true のシナリオを除外
  */
-async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings) {
+async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings, user1Id = null) {
   const ageGroup = calcAgeGroup(birthYear, birthMonth);
   const ageGroups = ageGroup === "universal" ? ["universal"] : [ageGroup, "universal"];
 
@@ -137,11 +137,13 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings) 
     selected = pool[Math.floor(Math.random() * pool.length)];
   }
 
-  await supabase.from("liff_sessions").insert({
+  const insertData = {
     household_id: householdId,
     scenario_id: selected.id,
     status: "new",
-  });
+  };
+  if (user1Id) insertData.user1_id = user1Id;
+  await supabase.from("liff_sessions").insert(insertData);
 }
 
 // ============================================================
@@ -181,7 +183,7 @@ liffRouter.post("/onboarding", async (req, res) => {
         .select()
         .single();
 
-      await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings);
+      await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings, existingUser.id);
 
       return res.json({
         household: enrichHousehold(household),
@@ -215,7 +217,7 @@ liffRouter.post("/onboarding", async (req, res) => {
     if (userErr) throw userErr;
 
     // セッション配信
-    await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings);
+    await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings, user.id);
 
     res.json({
       household: enrichHousehold(household),
@@ -594,7 +596,19 @@ liffRouter.post("/sessions/:id/answer", async (req, res) => {
     const STEPS = ["step1", "step2", "step3", "step4"];
     const nextStep = STEPS[STEPS.indexOf(step) + 1] || "completed";
 
-    const isUser1 = session.user1_id === userId;
+    // user1_id が未設定のセッション（旧データ）は動的に割り当て
+    let { user1_id } = session;
+    if (!user1_id) {
+      if (session.user2_id === userId) {
+        // このユーザーが user2 → user1_id は不明（パートナーが先に来る想定）
+      } else {
+        // このユーザーが最初の回答者 → user1 として設定
+        user1_id = userId;
+        await supabase.from("liff_sessions").update({ user1_id: userId }).eq("id", sessionId);
+      }
+    }
+
+    const isUser1 = user1_id === userId;
     const updateField = isUser1 ? "user1_current_step" : "user2_current_step";
 
     const updates = {
@@ -629,7 +643,7 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
 
     const { data: session } = await supabase
       .from("liff_sessions")
-      .select("*, scenario:scenes(*), user1:liff_users!user1_id(display_name), user2:liff_users!user2_id(display_name)")
+      .select("*, scenario:scenes(*)")
       .eq("id", sessionId)
       .single();
 
@@ -646,15 +660,28 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
 
     const sceneText   = session.scenario.scene_text;
     const sessionType = session.scenario.session_type || "parent";
-    const isUser1     = session.user1_id === userId;
+
+    // user1_id が未設定のセッション（旧データ）を考慮
+    const isUser1 = session.user1_id
+      ? session.user1_id === userId
+      : session.user2_id !== userId;
     const partnerId   = isUser1 ? session.user2_id : session.user1_id;
     const partnerStep = isUser1 ? session.user2_current_step : session.user1_current_step;
     const partnerDone = partnerStep === "completed";
 
-    const myAns  = byUser[userId] || {};
-    const myName = isUser1
-      ? session.user1?.display_name || "あなた"
-      : session.user2?.display_name || "あなた";
+    const myAns = byUser[userId] || {};
+
+    // ユーザー名を個別クエリで取得（同テーブルへの複数FK joinの曖昧さを回避）
+    const myUserId      = userId;
+    const partnerUserId = partnerId;
+    const [{ data: myUserData }, { data: partnerUserData }] = await Promise.all([
+      supabase.from("liff_users").select("display_name").eq("id", myUserId).maybeSingle(),
+      partnerUserId
+        ? supabase.from("liff_users").select("display_name").eq("id", partnerUserId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const myName      = myUserData?.display_name || "あなた";
+    const partnerName = partnerUserData?.display_name || "パートナー";
 
     let myReflectionText = null;
     let coupleReflectionText = null;
@@ -679,10 +706,7 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
 
       // ── 子どもレンズ カップルリフレクション ──
       if (partnerDone && byUser[partnerId]) {
-        const partnerAns  = byUser[partnerId];
-        const partnerName = isUser1
-          ? session.user2?.display_name || "パートナー"
-          : session.user1?.display_name || "パートナー";
+        const partnerAns = byUser[partnerId];
 
         const u1Ans  = isUser1 ? myAns      : partnerAns;
         const u2Ans  = isUser1 ? partnerAns : myAns;
@@ -724,10 +748,7 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
 
       // ── 既存の親目線 カップルリフレクション ──
       if (partnerDone && byUser[partnerId]) {
-        const partnerAns  = byUser[partnerId];
-        const partnerName = isUser1
-          ? session.user2?.display_name || "パートナー"
-          : session.user1?.display_name || "パートナー";
+        const partnerAns = byUser[partnerId];
 
         coupleReflectionText = await generateCoupleReflection({
           sceneText,
