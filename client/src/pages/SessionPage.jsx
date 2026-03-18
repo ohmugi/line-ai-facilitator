@@ -68,7 +68,7 @@ const INTENSITY_LEVELS = [
 // ドラッグ&ドロップアイテム (Step4)
 // ============================================================
 function SortableItem({ id, label, rank, onDelete, canDelete }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id });
 
   return (
@@ -77,16 +77,18 @@ function SortableItem({ id, label, rank, onDelete, canDelete }) {
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`flex items-center gap-3 bg-white rounded-xl px-4 py-3 border mb-2
         ${isDragging ? "shadow-lg border-orange-300" : "border-gray-100 shadow-sm"}`}
+      {...attributes}
     >
       <span className="text-lg font-bold text-orange-400 w-6">{rank}.</span>
-      <span
-        className="text-sm text-gray-700 flex-1 cursor-grab"
-        {...attributes}
-        {...listeners}
-      >
+      <span className="text-sm text-gray-700 flex-1">
         {label}
       </span>
-      <span className="text-gray-300 cursor-grab" {...attributes} {...listeners}>⠿</span>
+      <span
+        ref={setActivatorNodeRef}
+        style={{ touchAction: "none" }}
+        className="text-gray-300 cursor-grab px-1"
+        {...listeners}
+      >⠿</span>
       {canDelete && (
         <button
           onPointerDown={(e) => e.stopPropagation()}
