@@ -689,10 +689,77 @@ function PartnerTab({ partnerAnswers, isChildLens, partnerCompleted }) {
 }
 
 // ============================================================
+// ステップ回答レンダラー（案A用）
+// ============================================================
+function renderAnswer(step, answer, isChildLens) {
+  if (!answer) return <span className="text-gray-300 text-xs">未回答</span>;
+
+  if (isChildLens) {
+    if (step === "step1") return <span>{answer.behavior}</span>;
+    if (step === "step2") return <span>{answer.reasonType}</span>;
+    if (step === "step3") return <span>{answer.feeling}</span>;
+    if (step === "step4") return <span>{answer.ideal}</span>;
+  } else {
+    if (step === "step1") {
+      if (!answer.emotion) return <span>感情なし</span>;
+      return (
+        <>
+          <span>{answer.emotion}（{answer.intensity}/10）</span>
+          {answer.thought && (
+            <span className="block mt-1 text-gray-500">想い: {answer.thought}</span>
+          )}
+        </>
+      );
+    }
+    if (step === "step2") {
+      const vals = Array.isArray(answer.values) ? answer.values : [];
+      return <span>{vals.join("、")}</span>;
+    }
+    if (step === "step3") {
+      return (
+        <>
+          <span>{answer.background}</span>
+          {answer.deepening2 && <span className="block mt-1 text-gray-500">{answer.deepening2}</span>}
+          {answer.deepening3 && <span className="block mt-1 text-gray-500">{answer.deepening3}</span>}
+        </>
+      );
+    }
+    if (step === "step4") {
+      const priorities = Array.isArray(answer.priorities)
+        ? [...answer.priorities].sort((a, b) => a.rank - b.rank)
+        : [];
+      return (
+        <ol className="list-decimal list-inside space-y-0.5">
+          {priorities.map((p, i) => <li key={i}>{p.value}</li>)}
+        </ol>
+      );
+    }
+  }
+  return null;
+}
+
+// ============================================================
 // リフレクション
 // ============================================================
-function ReflectionView({ myReflectionText, coupleReflection, onHome, partnerAnswers, isChildLens }) {
-  const [showPartner, setShowPartner] = useState(false);
+function ReflectionView({ myReflectionText, coupleReflection, onHome, myAnswers, partnerAnswers, isChildLens }) {
+  const partnerMap = {};
+  (partnerAnswers || []).forEach(({ step, answer }) => { partnerMap[step] = answer; });
+
+  const hasPartner = partnerAnswers?.length > 0;
+
+  const steps = isChildLens
+    ? [
+        { key: "step1", label: "Step A: 行動予測" },
+        { key: "step2", label: "Step B: 根拠" },
+        { key: "step3", label: "Step C: 感情反応" },
+        { key: "step4", label: "Step D: 理想像" },
+      ]
+    : [
+        { key: "step1", label: "Step 1: 気持ち" },
+        { key: "step2", label: "Step 2: 価値観" },
+        { key: "step3", label: "Step 3: 原体験" },
+        { key: "step4", label: "Step 4: 関わり方" },
+      ];
 
   return (
     <motion.div
@@ -718,9 +785,7 @@ function ReflectionView({ myReflectionText, coupleReflection, onHome, partnerAns
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <p className="text-xs font-medium text-green-600 mb-2">
-              ふたりへ 💚
-            </p>
+            <p className="text-xs font-medium text-green-600 mb-2">ふたりへ 💚</p>
             <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
               {coupleReflection}
             </p>
@@ -732,28 +797,37 @@ function ReflectionView({ myReflectionText, coupleReflection, onHome, partnerAns
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           >
             <p className="text-xs text-gray-400 mb-1">ふたりへのメッセージ</p>
-            <p className="text-sm text-gray-400">
-              パートナーが完了したら届くにゃ🐾
-            </p>
+            <p className="text-sm text-gray-400">パートナーが完了したら届くにゃ🐾</p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* パートナーの回答 */}
-      {partnerAnswers?.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <button
-            onClick={() => setShowPartner((v) => !v)}
-            className="w-full flex items-center justify-between px-5 py-4 text-left"
-          >
-            <span className="text-sm font-medium text-gray-700">パートナーの回答を見る</span>
-            <span className="text-gray-400 text-xs">{showPartner ? "▲ 閉じる" : "▼ 開く"}</span>
-          </button>
-          {showPartner && (
-            <div className="px-5 pb-4 space-y-3 border-t border-gray-100">
-              <PartnerTab partnerAnswers={partnerAnswers} isChildLens={isChildLens} partnerCompleted={true} />
+      {/* ステップ別比較（案A） */}
+      {hasPartner && (
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-gray-400 px-1">ステップ別の回答比較</p>
+          {steps.map(({ key, label }) => (
+            <div key={key} className="bg-white rounded-2xl border border-gray-100 p-4">
+              <p className="text-xs font-medium text-gray-400 mb-3">{label}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-orange-50 rounded-xl p-3">
+                  <p className="text-xs font-medium text-orange-400 mb-1.5">自分</p>
+                  <div className="text-xs text-gray-700 leading-relaxed">
+                    {renderAnswer(key, myAnswers?.[key], isChildLens)}
+                  </div>
+                </div>
+                <div className="bg-blue-50 rounded-xl p-3">
+                  <p className="text-xs font-medium text-blue-400 mb-1.5">パートナー</p>
+                  <div className="text-xs text-gray-700 leading-relaxed">
+                    {partnerMap[key]
+                      ? renderAnswer(key, partnerMap[key], isChildLens)
+                      : <span className="text-gray-300">未回答</span>
+                    }
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
+          ))}
         </div>
       )}
 
@@ -1200,6 +1274,7 @@ export default function SessionPage() {
                 myReflectionText={myReflectionText}
                 coupleReflection={coupleReflection}
                 onHome={() => navigate("/home")}
+                myAnswers={myAnswers}
                 partnerAnswers={partnerAnswers}
                 isChildLens={isChildLens}
               />
