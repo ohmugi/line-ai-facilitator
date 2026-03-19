@@ -534,11 +534,19 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
       return thought || emotion || "";
     };
 
+    // ユーザー名を取得
+    const { data: userData } = await supabase
+      .from("liff_users")
+      .select("display_name")
+      .eq("id", userId)
+      .maybeSingle();
+    const userName = userData?.display_name || "あなた";
+
     if (step === "step2") {
       const emotionAnswer = buildEmotionContext(byStep.step1);
       const options = await generateStep2Options({ sceneText, emotionAnswer });
       const question = await import("../ai/generateStep2.js")
-        .then((m) => m.generateStep2Question({ sceneText, emotionAnswer, userName: "あなた" }));
+        .then((m) => m.generateStep2Question({ sceneText, emotionAnswer, userName }));
       return res.json({ options, question });
     }
 
@@ -547,7 +555,28 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
       const valueChoice   = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
       const options = await generateStep3Options({ sceneText, emotionAnswer, valueChoice });
       const question = await import("../ai/generateStep3.js")
-        .then((m) => m.generateStep3Question({ sceneText, emotionAnswer, valueChoice, userName: "あなた" }));
+        .then((m) => m.generateStep3Question({ sceneText, emotionAnswer, valueChoice, userName }));
+      return res.json({ options, question });
+    }
+
+    if (step === "step3_2") {
+      const { generateStep3_2Question, generateStep3_2Options } = await import("../ai/generateStep3Deep.js");
+      const emotionAnswer  = buildEmotionContext(byStep.step1);
+      const valueChoice    = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
+      const initialAnswer  = byStep.step3?.background || "";
+      const question = await generateStep3_2Question({ sceneText, emotionAnswer, valueChoice, initialAnswer, userName });
+      const options  = await generateStep3_2Options({ sceneText, initialAnswer, question });
+      return res.json({ options, question });
+    }
+
+    if (step === "step3_3") {
+      const { generateStep3_3Question, generateStep3_3Options } = await import("../ai/generateStep3Deep.js");
+      const emotionAnswer  = buildEmotionContext(byStep.step1);
+      const valueChoice    = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
+      const initialAnswer  = byStep.step3?.background || "";
+      const step3_2Answer  = byStep.step3?.deepening2 || "";
+      const question = await generateStep3_3Question({ sceneText, emotionAnswer, valueChoice, initialAnswer, step3_2Answer, userName });
+      const options  = await generateStep3_3Options({ sceneText, initialAnswer, step3_2Answer, question });
       return res.json({ options, question });
     }
 
@@ -557,7 +586,7 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
       const backgroundChoice = byStep.step3?.background || "";
       const options = await generateStep4Options({ sceneText, emotionAnswer, valueChoice, backgroundChoice });
       const question = await import("../ai/generateStep4.js")
-        .then((m) => m.generateStep4Question({ sceneText, emotionAnswer, valueChoice, backgroundChoice, userName: "あなた" }));
+        .then((m) => m.generateStep4Question({ sceneText, emotionAnswer, valueChoice, backgroundChoice, userName }));
       return res.json({ options, question });
     }
 
