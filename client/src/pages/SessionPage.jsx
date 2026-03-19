@@ -3,21 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, X, User, Users } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { ChevronUp, ChevronDown } from "lucide-react";
 
 import { useAppStore } from "../stores/appStore";
 import { useRealtimeSession } from "../hooks/useRealtimeSession";
@@ -65,42 +51,6 @@ const INTENSITY_LEVELS = [
 ];
 
 // ============================================================
-// ドラッグ&ドロップアイテム (Step4)
-// ============================================================
-function SortableItem({ id, label, rank, onDelete, canDelete }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`flex items-center gap-3 bg-white rounded-xl px-4 py-3 border mb-2
-        ${isDragging ? "shadow-lg border-orange-300" : "border-gray-100 shadow-sm"}`}
-      {...attributes}
-    >
-      <span className="text-lg font-bold text-orange-400 w-6">{rank}.</span>
-      <span className="text-sm text-gray-700 flex-1">
-        {label}
-      </span>
-      <span
-        ref={setActivatorNodeRef}
-        style={{ touchAction: "none" }}
-        className="text-gray-300 cursor-grab px-1"
-        {...listeners}
-      >⠿</span>
-      {canDelete && (
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => onDelete(id)}
-          className="text-gray-300 hover:text-red-400 text-lg leading-none ml-1"
-        >
-          ×
-        </button>
-      )}
-    </div>
-  );
-}
 
 // ============================================================
 // Step コンポーネント群
@@ -333,17 +283,57 @@ function Step3({ options, question, onChange, value }) {
   );
 }
 
-/** Step4: ドラッグ&ドロップ優先順位 */
+/** Step3深掘り（Step3-2 / Step3-3 共用） */
+function Step3Deep({ options, question, value, onChange }) {
+  const isPreset = (options || []).includes(value);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value || ""));
+
+  const handleChange = (opt) => { setFreeText(""); onChange(opt); };
+  const handleFreeText = (text) => { setFreeText(text); onChange(text); };
+
+  return (
+    <div className="space-y-3">
+      {question && (
+        <div className="bg-blue-50 rounded-2xl px-4 py-3 mb-4">
+          <p className="text-sm text-blue-700">{question}</p>
+        </div>
+      )}
+      {(options || []).map((opt) => (
+        <label
+          key={opt}
+          className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors
+            ${value === opt ? "border-blue-400 bg-blue-50" : "border-gray-100 bg-white"}`}
+        >
+          <input
+            type="radio"
+            className="accent-blue-500"
+            checked={value === opt}
+            onChange={() => handleChange(opt)}
+          />
+          <span className="text-sm text-gray-700">{opt}</span>
+        </label>
+      ))}
+      <div className={`border-2 rounded-xl p-3 transition-colors
+        ${!isPreset && value && !value.includes("次に進みたい") ? "border-blue-400 bg-blue-50" : "border-dashed border-gray-200 bg-white"}`}>
+        <p className="text-xs text-gray-400 mb-2">または自分の言葉で</p>
+        <textarea
+          rows={2}
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none resize-none"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Step4: 優先順位（↑↓ボタンで並べ替え） */
 function Step4({ options, question, onChange, value }) {
   const [items, setItems] = useState(
     value?.priorities?.map((p) => p.value) || options || []
   );
   const [customText, setCustomText] = useState("");
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
-  );
 
   useEffect(() => {
     if (options && !value?.priorities) {
@@ -361,12 +351,22 @@ function Step4({ options, question, onChange, value }) {
     });
   };
 
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIdx = items.indexOf(active.id);
-    const newIdx = items.indexOf(over.id);
-    commit(arrayMove(items, oldIdx, newIdx));
+  const moveUp = (idx) => {
+    if (idx === 0) return;
+    const next = [...items];
+    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    commit(next);
+  };
+
+  const moveDown = (idx) => {
+    if (idx === items.length - 1) return;
+    const next = [...items];
+    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    commit(next);
+  };
+
+  const deleteItem = (idx) => {
+    commit(items.filter((_, i) => i !== idx));
   };
 
   const addCustomItem = () => {
@@ -376,10 +376,6 @@ function Step4({ options, question, onChange, value }) {
     commit([...items, text]);
   };
 
-  const deleteItem = (id) => {
-    commit(items.filter((item) => item !== id));
-  };
-
   return (
     <div>
       {question && (
@@ -387,21 +383,42 @@ function Step4({ options, question, onChange, value }) {
           <p className="text-sm text-purple-700">{question}</p>
         </div>
       )}
-      <p className="text-xs text-gray-400 mb-3">長押しorドラッグで順番を変えてにゃ</p>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={items} strategy={verticalListSortingStrategy}>
-          {items.map((item, idx) => (
-            <SortableItem
-              key={item}
-              id={item}
-              label={item}
-              rank={idx + 1}
-              onDelete={deleteItem}
-              canDelete={items.length > 1}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
+      <p className="text-xs text-gray-400 mb-3">↑↓ボタンで順番を変えてにゃ</p>
+      <div className="space-y-2">
+        {items.map((item, idx) => (
+          <div
+            key={item}
+            className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm"
+          >
+            <span className="text-lg font-bold text-orange-400 w-6">{idx + 1}.</span>
+            <span className="text-sm text-gray-700 flex-1">{item}</span>
+            <div className="flex flex-col gap-0.5">
+              <button
+                onClick={() => moveUp(idx)}
+                disabled={idx === 0}
+                className="text-gray-400 disabled:opacity-20 hover:text-orange-400"
+              >
+                <ChevronUp size={18} />
+              </button>
+              <button
+                onClick={() => moveDown(idx)}
+                disabled={idx === items.length - 1}
+                className="text-gray-400 disabled:opacity-20 hover:text-orange-400"
+              >
+                <ChevronDown size={18} />
+              </button>
+            </div>
+            {items.length > 1 && (
+              <button
+                onClick={() => deleteItem(idx)}
+                className="text-gray-300 hover:text-red-400 text-lg leading-none ml-1"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
       <div className="flex gap-2 mt-3">
         <input
           type="text"
@@ -674,7 +691,9 @@ function PartnerTab({ partnerAnswers, isChildLens, partnerCompleted }) {
 // ============================================================
 // リフレクション
 // ============================================================
-function ReflectionView({ myReflectionText, coupleReflection, onHome }) {
+function ReflectionView({ myReflectionText, coupleReflection, onHome, partnerAnswers, isChildLens }) {
+  const [showPartner, setShowPartner] = useState(false);
+
   return (
     <motion.div
       className="space-y-4"
@@ -720,6 +739,24 @@ function ReflectionView({ myReflectionText, coupleReflection, onHome }) {
         )}
       </AnimatePresence>
 
+      {/* パートナーの回答 */}
+      {partnerAnswers?.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <button
+            onClick={() => setShowPartner((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left"
+          >
+            <span className="text-sm font-medium text-gray-700">パートナーの回答を見る</span>
+            <span className="text-gray-400 text-xs">{showPartner ? "▲ 閉じる" : "▼ 開く"}</span>
+          </button>
+          {showPartner && (
+            <div className="px-5 pb-4 space-y-3 border-t border-gray-100">
+              <PartnerTab partnerAnswers={partnerAnswers} isChildLens={isChildLens} partnerCompleted={true} />
+            </div>
+          )}
+        </div>
+      )}
+
       <button
         onClick={onHome}
         className="w-full bg-gray-800 text-white font-semibold py-4 rounded-2xl mt-4"
@@ -745,6 +782,10 @@ export default function SessionPage() {
   const [myAnswers,  setMyAnswers]  = useState({});
   const [stepIndex,  setStepIndex]  = useState(0);
   const [step1SubStep, setStep1SubStep] = useState(0); // 0=emotion 1=intensity 2=thought
+  const [step3SubStep, setStep3SubStep] = useState(0); // 0=background 1=deep2 2=deep3
+  const [step3DeepOptions, setStep3DeepOptions] = useState(null);
+  const [step3DeepQuestion, setStep3DeepQuestion] = useState(null);
+  const [step3DeepAnswer, setStep3DeepAnswer] = useState({ deepening2: "", deepening3: "" });
   const [tab,        setTab]        = useState("me");
   const [options,    setOptions]    = useState(null);
   const [question,   setQuestion]   = useState(null);
@@ -903,6 +944,11 @@ export default function SessionPage() {
       if (step1SubStep === 1) return step1Draft.intensity !== null;
       return !!step1Draft.thought;
     }
+    if (stepIndex === 2) { // step3
+      if (step3SubStep === 0) return !!currentAnswer?.background;
+      if (step3SubStep === 1) return !!step3DeepAnswer.deepening2;
+      if (step3SubStep === 2) return !!step3DeepAnswer.deepening3;
+    }
     return !!currentAnswer;
   })();
 
@@ -972,6 +1018,81 @@ export default function SessionPage() {
       // step1SubStep === 2: thought 選択済み → 保存して step2 へ
     }
 
+    // ── 親目線: Step3 深掘りサブステップ ──
+    if (!isChildLens && stepIndex === 2) {
+      if (step3SubStep === 0) {
+        if (!isAnswerReady) return;
+        setSaving(true);
+        try {
+          // 初回選択を DB に保存（step3_2 生成時に読み込まれる）
+          await api.saveAnswer(sessionId, user.id, "step3", { background: currentAnswer.background });
+          setMyAnswers((prev) => ({ ...prev, step3: { background: currentAnswer.background } }));
+          setLoadingOpts(true);
+          const { options: deepOpts, question: deepQ } = await api.getOptions(sessionId, "step3_2", user?.id);
+          setStep3DeepOptions(deepOpts);
+          setStep3DeepQuestion(deepQ);
+          setStep3SubStep(1);
+        } finally {
+          setSaving(false);
+          setLoadingOpts(false);
+        }
+        return;
+      }
+
+      if (step3SubStep === 1) {
+        if (!isAnswerReady) return;
+        const isSkip = step3DeepAnswer.deepening2.includes("次に進みたい");
+        if (isSkip) {
+          setStep3SubStep(0);
+          setStep3DeepOptions(null);
+          setStep3DeepQuestion(null);
+          setStep3DeepAnswer({ deepening2: "", deepening3: "" });
+          setOptions(null);
+          setQuestion(null);
+          setStepIndex((i) => i + 1);
+          return;
+        }
+        setSaving(true);
+        try {
+          const updated = { background: myAnswers.step3?.background, deepening2: step3DeepAnswer.deepening2 };
+          await api.saveAnswer(sessionId, user.id, "step3", updated);
+          setMyAnswers((prev) => ({ ...prev, step3: updated }));
+          setLoadingOpts(true);
+          const { options: deepOpts3, question: deepQ3 } = await api.getOptions(sessionId, "step3_3", user?.id);
+          setStep3DeepOptions(deepOpts3);
+          setStep3DeepQuestion(deepQ3);
+          setStep3SubStep(2);
+        } finally {
+          setSaving(false);
+          setLoadingOpts(false);
+        }
+        return;
+      }
+
+      if (step3SubStep === 2) {
+        if (!isAnswerReady) return;
+        const isSkip = step3DeepAnswer.deepening3.includes("次に進みたい");
+        if (!isSkip) {
+          setSaving(true);
+          try {
+            const updated = { ...myAnswers.step3, deepening3: step3DeepAnswer.deepening3 };
+            await api.saveAnswer(sessionId, user.id, "step3", updated);
+            setMyAnswers((prev) => ({ ...prev, step3: updated }));
+          } finally {
+            setSaving(false);
+          }
+        }
+        setStep3SubStep(0);
+        setStep3DeepOptions(null);
+        setStep3DeepQuestion(null);
+        setStep3DeepAnswer({ deepening2: "", deepening3: "" });
+        setOptions(null);
+        setQuestion(null);
+        setStepIndex((i) => i + 1);
+        return;
+      }
+    }
+
     if (!isAnswerReady) return;
     setSaving(true);
     try {
@@ -1013,7 +1134,9 @@ export default function SessionPage() {
       ? (["Step A: 行動予測", "Step B: 根拠", "Step C: 感情", "Step D: 理想像", "完了"][stepIndex] || "完了")
       : stepIndex === 0
         ? ["気持ちを選ぶ", "感じた強さ", "どう思った？"][step1SubStep]
-        : ["Step 2/4", "Step 3/4", "Step 4/4", "完了"][stepIndex - 1];
+        : stepIndex === 2 && step3SubStep > 0
+          ? `Step 3/4: 深掘り (${step3SubStep}/2)`
+          : ["Step 2/4", "Step 3/4", "Step 4/4", "完了"][stepIndex - 1];
 
   // ============================================================
   // UI
@@ -1077,6 +1200,8 @@ export default function SessionPage() {
                 myReflectionText={myReflectionText}
                 coupleReflection={coupleReflection}
                 onHome={() => navigate("/home")}
+                partnerAnswers={partnerAnswers}
+                isChildLens={isChildLens}
               />
             </motion.div>
           ) : tab === "partner" ? (
@@ -1163,12 +1288,28 @@ export default function SessionPage() {
                   onChange={(v) => setMyAnswers((prev) => ({ ...prev, step2: v }))}
                 />
               )}
-              {!isChildLens && currentStep === "step3" && (
+              {!isChildLens && currentStep === "step3" && step3SubStep === 0 && (
                 <Step3
                   options={options}
                   question={question}
                   value={currentAnswer}
                   onChange={(v) => setMyAnswers((prev) => ({ ...prev, step3: v }))}
+                />
+              )}
+              {!isChildLens && currentStep === "step3" && step3SubStep === 1 && (
+                <Step3Deep
+                  options={step3DeepOptions}
+                  question={step3DeepQuestion}
+                  value={step3DeepAnswer.deepening2}
+                  onChange={(v) => setStep3DeepAnswer((prev) => ({ ...prev, deepening2: v }))}
+                />
+              )}
+              {!isChildLens && currentStep === "step3" && step3SubStep === 2 && (
+                <Step3Deep
+                  options={step3DeepOptions}
+                  question={step3DeepQuestion}
+                  value={step3DeepAnswer.deepening3}
+                  onChange={(v) => setStep3DeepAnswer((prev) => ({ ...prev, deepening3: v }))}
                 />
               )}
               {!isChildLens && currentStep === "step4" && (
