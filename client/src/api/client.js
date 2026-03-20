@@ -60,8 +60,8 @@ export const api = {
   },
 
   /** 回答保存 */
-  saveAnswer: (sessionId, userId, step, answer) =>
-    request("POST", `/sessions/${sessionId}/answer`, { userId, step, answer }),
+  saveAnswer: (sessionId, userId, step, answer, extraMeta = {}) =>
+    request("POST", `/sessions/${sessionId}/answer`, { userId, step, answer, ...extraMeta }),
 
   /** セッション完了・リフレクション生成 */
   completeSession: (sessionId, userId) =>

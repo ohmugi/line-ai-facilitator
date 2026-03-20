@@ -22,7 +22,8 @@ export async function generateChildLensReflection({
 メッセージのルール:
 - 語尾は「にゃ」「にゃ🐾」を使う
 - 全体で6〜9行程度
-- 構成：①この親の子ども観の紹介 → ②その見方が生まれた背景（根拠タイプから推察）→ ③感情と理想の意味 → ④子どもへの温かいまなざし
+- 構成：①この親の子ども観の紹介 → ②その見方が生まれた背景（根拠タイプから推察）→ ③感情と理想の意味（理想像をStep A〜Cと接続して言及）→ ④子どもへの温かいまなざし
+- Step D の理想像は列挙せず、「〇〇という気持ちの奥に△△な子どもになってほしいという願いがあるんだにゃ」という形で感情と接続して言及する
 - 批判や正解提示はせず、「そういう見方があるんだにゃ」という発見のトーン
 - 絵文字は🐾を最後の1箇所のみ`;
 
@@ -52,10 +53,12 @@ export async function generateChildLensCoupleReflection({
   sceneText,
   user1Name,
   user1Behavior,  // Step A
+  user1Basis,     // Step B
   user1Feeling,   // Step C
   user1Ideal,     // Step D
   user2Name,
   user2Behavior,
+  user2Basis,     // Step B
   user2Feeling,
   user2Ideal,
 }) {
@@ -79,12 +82,12 @@ export async function generateChildLensCoupleReflection({
       content: `シナリオ: ${sceneText}
 
 ${user1Name}さんの回答:
-- 子どもの行動予測: ${user1Behavior}
+- 子どもの行動予測: ${user1Behavior}${user1Basis ? `\n- 根拠の性質: ${user1Basis}` : ""}
 - 感情反応: ${user1Feeling}
 - 子どもへの理想像: ${user1Ideal}
 
 ${user2Name}さんの回答:
-- 子どもの行動予測: ${user2Behavior}
+- 子どもの行動予測: ${user2Behavior}${user2Basis ? `\n- 根拠の性質: ${user2Basis}` : ""}
 - 感情反応: ${user2Feeling}
 - 子どもへの理想像: ${user2Ideal}
 

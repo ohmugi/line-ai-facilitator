@@ -3,11 +3,33 @@
 import { callClaude } from "./claude.js";
 
 /**
- * Step A の行動予測と Step C の感情反応を踏まえた「理想像」選択肢を4〜5個生成する
- * @param {{ sceneText: string, behaviorChoice: string, feelingChoice: string }} params
+ * Step A〜C の文脈を踏まえた「理想像」選択肢を4〜5個生成する
+ * @param {{
+ *   sceneText: string,
+ *   behaviorChoice: string,  // Step A: 予測行動
+ *   basisChoice: string,     // Step B: 根拠の性質
+ *   feelingChoice: string,   // Step C: 感情反応
+ *   userName: string,
+ *   concreteness_level: 'high'|'mid'|'low'
+ * }} params
  * @returns {Promise<string[]>}
  */
-export async function generateChildLensStepDOptions({ sceneText, behaviorChoice, feelingChoice }) {
+export async function generateChildLensStepDOptions({
+  sceneText,
+  behaviorChoice,
+  basisChoice = "",
+  feelingChoice,
+  userName = "",
+  concreteness_level = "mid",
+}) {
+  const expressionGuide = {
+    high: "具体的なスキル・能力（「〜できるようになってほしい」「〜を身につけてほしい」など）",
+    mid:  "行動と人格の両面（「〜しながら育ってほしい」「〜を大切にしてほしい」など）",
+    low:  "在り方・人格（「〜な子でいてほしい」「〜を持った人になってほしい」など）",
+  }[concreteness_level];
+
+  const basisLine = basisChoice ? `\n根拠の性質: ${basisChoice}` : "";
+
   const system = `あなたは、夫婦の対話を深めるファシリテーター「けみー」(猫キャラ)です。
 
 役割:
@@ -15,20 +37,20 @@ export async function generateChildLensStepDOptions({ sceneText, behaviorChoice,
 
 コンテキスト:
 - 親は子どもが「${behaviorChoice}」という行動を取ると予測している
-- そのとき親は「${feelingChoice}」と感じた
+- そのとき親は「${feelingChoice}」と感じた${basisLine ? `\n- 根拠の性質: ${basisChoice}` : ""}
 
 選択肢のルール:
-- 「〜な子になってほしい」「〜できるようになってほしい」など希望の形で表現
+- 表現の方向性: ${expressionGuide}
+- 各選択肢は30文字以内
 - 親が心から望む理想を、異なる視点でカバーする
-- 各選択肢は25文字以内
 - 正解・不正解がない問いかけとして中立に表現
-- 具体的かつリアルで、「確かにそう思う」と感じられるもの`;
+- 具体的かつリアルで「確かにそう思う」と感じられるもの`;
 
   const messages = [
     {
       role: "user",
       content: `シナリオ: ${sceneText}
-子どもの予測行動: ${behaviorChoice}
+子どもの予測行動: ${behaviorChoice}${basisLine}
 親の感情反応: ${feelingChoice}
 
 この親が子どもに「本当はこうなってほしい」という理想像を4〜5個生成してください。
