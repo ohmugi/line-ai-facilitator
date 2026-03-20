@@ -6,7 +6,7 @@ import { supabase } from "../supabase/client.js";
 import { generateStep1Options } from "../ai/generateStep1.js";
 import { generateStep2Options } from "../ai/generateStep2.js";
 import { generateStep3Options } from "../ai/generateStep3.js";
-import { generateStep4Options } from "../ai/generateStep4.js";
+import { generateStep4Options, detectConcretenesslevel } from "../ai/generateStep4.js";
 import { generateReflection } from "../ai/generateReflection.js";
 import { generateCoupleReflection } from "../ai/generateCoupleReflection.js";
 import { generateChildLensStepAOptions } from "../ai/generateChildLensStepA.js";
@@ -584,10 +584,11 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
       const emotionAnswer    = buildEmotionContext(byStep.step1);
       const valueChoice      = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
       const backgroundChoice = byStep.step3?.background || "";
-      const options = await generateStep4Options({ sceneText, emotionAnswer, valueChoice, backgroundChoice });
+      const concreteness_level = detectConcretenesslevel({ emotionAnswer, valueChoice, backgroundChoice });
+      const options = await generateStep4Options({ sceneText, emotionAnswer, valueChoice, backgroundChoice, concreteness_level });
       const question = await import("../ai/generateStep4.js")
-        .then((m) => m.generateStep4Question({ sceneText, emotionAnswer, valueChoice, backgroundChoice, userName }));
-      return res.json({ options, question });
+        .then((m) => m.generateStep4Question({ sceneText, emotionAnswer, valueChoice, backgroundChoice, userName, concreteness_level }));
+      return res.json({ options, question, concreteness_level });
     }
 
     return res.status(400).json({ error: `Unknown step: ${step}` });
@@ -603,16 +604,16 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
 // ============================================================
 liffRouter.post("/sessions/:id/answer", async (req, res) => {
   try {
-    const { userId, step, answer } = req.body;
+    const { userId, step, answer, concreteness_level } = req.body;
     const sessionId = req.params.id;
 
     // 回答を upsert
+    const upsertData = { session_id: sessionId, user_id: userId, step, answer };
+    if (concreteness_level) upsertData.concreteness_level = concreteness_level;
+
     const { error: ansErr } = await supabase
       .from("session_answers")
-      .upsert(
-        { session_id: sessionId, user_id: userId, step, answer },
-        { onConflict: "session_id,user_id,step" }
-      );
+      .upsert(upsertData, { onConflict: "session_id,user_id,step" });
     if (ansErr) throw ansErr;
 
     // セッションの現在ステップを更新
@@ -745,13 +746,15 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
         coupleReflectionText = await generateChildLensCoupleReflection({
           sceneText,
           user1Name:     u1Name,
-          user1Behavior: u1Ans.step1?.behavior || "",
-          user1Feeling:  u1Ans.step3?.feeling  || "",
-          user1Ideal:    u1Ans.step4?.ideal    || "",
+          user1Behavior: u1Ans.step1?.behavior  || "",
+          user1Basis:    u1Ans.step2?.reasonType || "",
+          user1Feeling:  u1Ans.step3?.feeling   || "",
+          user1Ideal:    u1Ans.step4?.ideal      || "",
           user2Name:     u2Name,
-          user2Behavior: u2Ans.step1?.behavior || "",
-          user2Feeling:  u2Ans.step3?.feeling  || "",
-          user2Ideal:    u2Ans.step4?.ideal    || "",
+          user2Behavior: u2Ans.step1?.behavior  || "",
+          user2Basis:    u2Ans.step2?.reasonType || "",
+          user2Feeling:  u2Ans.step3?.feeling   || "",
+          user2Ideal:    u2Ans.step4?.ideal      || "",
         });
       }
     } else {
@@ -764,13 +767,19 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
           })()
         : s1.thought || s1.emotion || "";
 
+      // Step4: 新形式 { choice } を優先、旧形式 { priorities } にも対応
+      const visionChoice = myAns.step4?.choice
+        || (Array.isArray(myAns.step4?.priorities) ? myAns.step4.priorities.map((p) => p.value).join("、") : "")
+        || myAns.step4?.vision
+        || "";
+
       if (emotionAnswer) {
         myReflectionText = await generateReflection({
           sceneText,
           emotionAnswer,
           valueChoice:      Array.isArray(myAns.step2?.values) ? myAns.step2.values.join("、") : (myAns.step2?.value || ""),
           backgroundChoice: myAns.step3?.background || "",
-          visionChoice:     Array.isArray(myAns.step4?.priorities) ? myAns.step4.priorities.map((p) => p.value).join("、") : (myAns.step4?.vision || ""),
+          visionChoice,
           userName: myName,
         });
       }
@@ -778,15 +787,21 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
       // ── 既存の親目線 カップルリフレクション ──
       if (partnerDone && byUser[partnerId]) {
         const partnerAns = byUser[partnerId];
+        const partnerVision = partnerAns.step4?.choice
+          || (Array.isArray(partnerAns.step4?.priorities) ? partnerAns.step4.priorities.map((p) => p.value).join("、") : "")
+          || partnerAns.step4?.vision
+          || "";
 
         coupleReflectionText = await generateCoupleReflection({
           sceneText,
           user1Name:  isUser1 ? myName : partnerName,
           user1Step1: isUser1 ? myAns.step1 : partnerAns.step1,
           user1Step2: isUser1 ? myAns.step2 : partnerAns.step2,
+          user1Step4: isUser1 ? { choice: visionChoice } : { choice: partnerVision },
           user2Name:  isUser1 ? partnerName : myName,
           user2Step1: isUser1 ? partnerAns.step1 : myAns.step1,
           user2Step2: isUser1 ? partnerAns.step2 : myAns.step2,
+          user2Step4: isUser1 ? { choice: partnerVision } : { choice: visionChoice },
         });
       }
     }

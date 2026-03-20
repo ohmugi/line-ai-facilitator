@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, X, User, Users } from "lucide-react";
-import { ChevronUp, ChevronDown } from "lucide-react";
 
 import { useAppStore } from "../stores/appStore";
 import { useRealtimeSession } from "../hooks/useRealtimeSession";
@@ -328,113 +327,70 @@ function Step3Deep({ options, question, value, onChange }) {
   );
 }
 
-/** Step4: 優先順位（↑↓ボタンで並べ替え） */
+/** Step4: ラジオ選択 + 自由入力 */
 function Step4({ options, question, onChange, value }) {
-  const [items, setItems] = useState(
-    value?.priorities?.map((p) => p.value) || options || []
-  );
-  const [customText, setCustomText] = useState("");
+  const FREE_LABEL = "自分の言葉で書く";
+  const isPreset = (options || []).includes(value?.choice);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value?.choice || ""));
+  const [showFree, setShowFree] = useState(!isPreset && !!value?.choice);
 
   useEffect(() => {
-    if (options && !value?.priorities) {
-      setItems(options);
-      onChange({
-        priorities: options.map((v, i) => ({ rank: i + 1, value: v, importance: 10 - i * 2 })),
-      });
+    if (options && !value?.choice) {
+      // 初期表示時に onChange を呼んで完了ボタンを正しい状態にする（何も選択していないのでまだ無効のまま）
     }
   }, [options]);
 
-  const commit = (next) => {
-    setItems(next);
-    onChange({
-      priorities: next.map((v, i) => ({ rank: i + 1, value: v, importance: 10 - i * 2 })),
-    });
+  const selectPreset = (opt) => {
+    setShowFree(false);
+    setFreeText("");
+    onChange({ choice: opt, is_custom: false });
   };
 
-  const moveUp = (idx) => {
-    if (idx === 0) return;
-    const next = [...items];
-    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-    commit(next);
+  const selectFree = () => {
+    setShowFree(true);
+    onChange({ choice: freeText, is_custom: true });
   };
 
-  const moveDown = (idx) => {
-    if (idx === items.length - 1) return;
-    const next = [...items];
-    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-    commit(next);
-  };
-
-  const deleteItem = (idx) => {
-    commit(items.filter((_, i) => i !== idx));
-  };
-
-  const addCustomItem = () => {
-    const text = customText.trim();
-    if (!text || items.includes(text)) return;
-    setCustomText("");
-    commit([...items, text]);
+  const handleFreeText = (text) => {
+    setFreeText(text);
+    onChange({ choice: text, is_custom: true });
   };
 
   return (
-    <div>
+    <div className="space-y-3">
       {question && (
         <div className="bg-purple-50 rounded-2xl px-4 py-3 mb-4">
           <p className="text-sm text-purple-700">{question}</p>
         </div>
       )}
-      <p className="text-xs text-gray-400 mb-3">↑↓ボタンで順番を変えてにゃ</p>
-      <div className="space-y-2">
-        {items.map((item, idx) => (
-          <div
-            key={item}
-            className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm"
-          >
-            <span className="text-lg font-bold text-orange-400 w-6">{idx + 1}.</span>
-            <span className="text-sm text-gray-700 flex-1">{item}</span>
-            <div className="flex flex-col gap-0.5">
-              <button
-                onClick={() => moveUp(idx)}
-                disabled={idx === 0}
-                className="text-gray-400 disabled:opacity-20 hover:text-orange-400"
-              >
-                <ChevronUp size={18} />
-              </button>
-              <button
-                onClick={() => moveDown(idx)}
-                disabled={idx === items.length - 1}
-                className="text-gray-400 disabled:opacity-20 hover:text-orange-400"
-              >
-                <ChevronDown size={18} />
-              </button>
-            </div>
-            {items.length > 1 && (
-              <button
-                onClick={() => deleteItem(idx)}
-                className="text-gray-300 hover:text-red-400 text-lg leading-none ml-1"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-2 mt-3">
-        <input
-          type="text"
-          placeholder="自分の言葉を追加…"
-          value={customText}
-          onChange={(e) => setCustomText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addCustomItem()}
-          className="flex-1 text-sm border border-dashed border-gray-300 rounded-xl px-3 py-2 outline-none focus:border-purple-400"
-        />
+      {(options || []).map((opt) => (
         <button
-          onClick={addCustomItem}
-          disabled={!customText.trim()}
-          className="text-sm px-3 py-2 rounded-xl bg-purple-100 text-purple-600 disabled:opacity-40"
+          key={opt}
+          onClick={() => selectPreset(opt)}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value?.choice === opt && !showFree ? "border-purple-400 bg-purple-50" : "border-gray-100 bg-white"}`}
         >
-          追加
+          <span className="text-sm text-gray-700">{opt}</span>
         </button>
+      ))}
+      <div
+        className={`border-2 rounded-xl p-3 transition-colors
+          ${showFree ? "border-purple-400 bg-purple-50" : "border-dashed border-gray-200 bg-white"}`}
+      >
+        <p
+          className="text-xs text-gray-400 mb-2 cursor-pointer"
+          onClick={selectFree}
+        >
+          または自分の言葉で
+        </p>
+        <textarea
+          rows={2}
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onFocus={selectFree}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none resize-none"
+        />
       </div>
     </div>
   );
@@ -725,6 +681,8 @@ function renderAnswer(step, answer, isChildLens) {
       );
     }
     if (step === "step4") {
+      // 新形式 { choice } を優先、旧形式 { priorities } にも対応
+      if (answer.choice) return <span>{answer.choice}</span>;
       const priorities = Array.isArray(answer.priorities)
         ? [...answer.priorities].sort((a, b) => a.rank - b.rank)
         : [];
@@ -863,6 +821,7 @@ export default function SessionPage() {
   const [tab,        setTab]        = useState("me");
   const [options,    setOptions]    = useState(null);
   const [question,   setQuestion]   = useState(null);
+  const [step4ConcreteLevel, setStep4ConcreteLevel] = useState(null);
   const [loadingOpts,setLoadingOpts]= useState(false);
   const [saving,     setSaving]     = useState(false);
   const [myReflectionText,  setMyReflectionText]  = useState(null);
@@ -990,9 +949,10 @@ export default function SessionPage() {
       if (stepIndex === 0) return;
       setLoadingOpts(true);
       api.getOptions(sessionId, step, user?.id)
-        .then(({ options, question }) => {
+        .then(({ options, question, concreteness_level }) => {
           setOptions(options);
           setQuestion(question);
+          if (concreteness_level) setStep4ConcreteLevel(concreteness_level);
         })
         .finally(() => setLoadingOpts(false));
     }
@@ -1023,6 +983,7 @@ export default function SessionPage() {
       if (step3SubStep === 1) return !!step3DeepAnswer.deepening2;
       if (step3SubStep === 2) return !!step3DeepAnswer.deepening3;
     }
+    if (stepIndex === 3) return !!currentAnswer?.choice; // step4: 新形式
     return !!currentAnswer;
   })();
 
@@ -1174,7 +1135,10 @@ export default function SessionPage() {
         ? { emotion: step1Draft.emotion, intensity: step1Draft.intensity, thought: step1Draft.thought }
         : currentAnswer;
 
-      await api.saveAnswer(sessionId, user.id, currentStep, answerToSave);
+      const extraMeta = (currentStep === "step4" && step4ConcreteLevel)
+        ? { concreteness_level: step4ConcreteLevel }
+        : {};
+      await api.saveAnswer(sessionId, user.id, currentStep, answerToSave, extraMeta);
       setMyAnswers((prev) => ({ ...prev, [currentStep]: answerToSave }));
 
       if (stepIndex === 3) {
