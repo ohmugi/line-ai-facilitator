@@ -609,7 +609,7 @@ liffRouter.post("/sessions/:id/answer", async (req, res) => {
 
     // 回答を upsert
     const upsertData = { session_id: sessionId, user_id: userId, step, answer };
-    if (concreteness_level) upsertData.concreteness_level = concreteness_level;
+
 
     const { error: ansErr } = await supabase
       .from("session_answers")
