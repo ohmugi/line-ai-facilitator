@@ -6,8 +6,8 @@ export async function handleFollow({ event, replyToken }) {
   if (replyToken) {
     const liffId = process.env.LIFF_ID;
     const msg = liffId
-      ? `友だち追加ありがとうにゃ🐾\nけみーをひらくにゃ↓\nhttps://liff.line.me/${liffId}`
-      : "友だち追加ありがとうにゃ🐾";
+      ? `はじめまして。けみーだにゃ🐾\n友達になってくれてありがと🎉\nこれから夫婦で子どもについて話すサポートをさせてほしいにゃ✨\n\nやり方はかんたん。\n下のけみーのイラストをタップして、子どもの情報を登録して、パートナーにURLを送る📩\nあとはふたりでけみーの質問にこたえるだけにゃ🐱\n\nそれじゃ、待ってるね🌿`
+      : `はじめまして。けみーだにゃ🐾\n友達になってくれてありがと🎉\nこれから夫婦で子どもについて話すサポートをさせてほしいにゃ✨\n\nやり方はかんたん。\nけみーのイラストをタップして、子どもの情報を登録して、パートナーにURLを送る📩\nあとはふたりでけみーの質問にこたえるだけにゃ🐱\n\nそれじゃ、待ってるね🌿`;
     await replyText(replyToken, msg);
   }
 }
