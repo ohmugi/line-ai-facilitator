@@ -1007,6 +1007,9 @@ export default function SessionPage() {
           setQuestion(null);
           setStepIndex((i) => i + 1);
         }
+      } catch (err) {
+        console.error("[handleNext/childLens]", err);
+        alert("保存に失敗しました。もう一度お試しください。\n" + (err?.message || ""));
       } finally {
         setSaving(false);
       }
@@ -1154,6 +1157,9 @@ export default function SessionPage() {
         setStep1Draft({ emotion: "", intensity: null, thought: "" });
         setStepIndex((i) => i + 1);
       }
+    } catch (err) {
+      console.error("[handleNext]", err);
+      alert("保存に失敗しました。もう一度お試しください。\n" + (err?.message || ""));
     } finally {
       setSaving(false);
     }
