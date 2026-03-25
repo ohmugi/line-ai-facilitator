@@ -87,21 +87,22 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings, 
   const ageGroup = calcAgeGroup(birthYear, birthMonth);
   const ageGroups = ageGroup === "universal" ? ["universal"] : [ageGroup, "universal"];
 
-  // 配信済みセッション（最新順）と最後のカテゴリを取得
+  // 配信済みセッション（最新順）と最後のカテゴリ・session_type を取得
   const { data: existing } = await supabase
     .from("liff_sessions")
-    .select("scenario_id, scenario:scenes(category)")
+    .select("scenario_id, scenario:scenes(category, session_type)")
     .eq("household_id", householdId)
     .order("delivered_at", { ascending: false });
 
   const existingIds = new Set((existing || []).map((s) => s.scenario_id));
   const isFirst = existingIds.size === 0;
   const lastCategory = existing?.[0]?.scenario?.category ?? null;
+  const lastSessionType = existing?.[0]?.scenario?.session_type ?? null;
 
   // 年齢対象のアクティブシナリオを全件取得
   const { data: allScenes } = await supabase
     .from("scenes")
-    .select("id, requires_siblings, category")
+    .select("id, requires_siblings, category, session_type")
     .eq("is_active", true)
     .in("age_group", ageGroups);
 
@@ -131,9 +132,12 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings, 
     } catch { /* is_starter 未マイグレーション時は無視 */ }
     selected = (starterId ? candidates.find((c) => c.id === starterId) : null) ?? candidates[0];
   } else {
-    // 2回目以降: 同カテゴリ回避 ＋ ランダム
-    const diffCategory = candidates.filter((s) => s.category !== lastCategory);
-    const pool = diffCategory.length > 0 ? diffCategory : candidates;
+    // 2回目以降: session_type 交互 ＋ 同カテゴリ回避 ＋ ランダム
+    const nextType = lastSessionType === "parent" ? "child_lens" : "parent";
+    const altTypeCandidates = candidates.filter((s) => s.session_type === nextType);
+    const typePool = altTypeCandidates.length > 0 ? altTypeCandidates : candidates;
+    const diffCategory = typePool.filter((s) => s.category !== lastCategory);
+    const pool = diffCategory.length > 0 ? diffCategory : typePool;
     selected = pool[Math.floor(Math.random() * pool.length)];
   }
 
