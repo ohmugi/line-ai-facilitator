@@ -806,11 +806,19 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
       }
     }
 
-    // 既存の reflection（パートナーの個別リフレクション）を保持してマージ
-    const existingPerUser = session.reflection?.perUser || {};
+    // AI生成後、直前に最新の reflection を再取得して競合上書きを防ぐ
+    const { data: latestSession } = await supabase
+      .from("liff_sessions")
+      .select("reflection, couple_reflection")
+      .eq("id", sessionId)
+      .single();
+    const existingPerUser = latestSession?.reflection?.perUser || {};
+    const existingDifference = latestSession?.reflection?.difference
+      || latestSession?.couple_reflection
+      || null;
     const newReflection = {
       perUser: { ...existingPerUser, ...(myReflectionText ? { [userId]: myReflectionText } : {}) },
-      difference: coupleReflectionText,
+      difference: coupleReflectionText || existingDifference,
     };
 
     // セッション状態を更新
@@ -844,12 +852,7 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
       }
     }
 
-    res.json({
-      reflection: {
-        perUser:    { [userId]: myReflectionText },
-        difference: coupleReflectionText,
-      },
-    });
+    res.json({ reflection: newReflection });
   } catch (err) {
     console.error("[liff/sessions/:id/complete]", err);
     res.status(500).json({ error: err.message });

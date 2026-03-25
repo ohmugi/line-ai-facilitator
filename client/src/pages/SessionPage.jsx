@@ -861,7 +861,9 @@ export default function SessionPage() {
           setMyReflectionText(perUser[user?.id]);
           setShowReflection(true);
         }
-        if (session.reflection.difference) setCoupleReflection(session.reflection.difference);
+        // couple_reflection カラムも fallback として参照（競合上書き対策）
+        const coupleText = session.reflection.difference || session.couple_reflection;
+        if (coupleText) setCoupleReflection(coupleText);
       }
 
       const completedSteps = mine.map((a) => a.step);
@@ -1370,20 +1372,44 @@ export default function SessionPage() {
         </AnimatePresence>
       </div>
 
-      {/* 次へボタン */}
+      {/* 次へボタン / リフレクション再取得ボタン */}
       {!showReflection && tab === "me" && !loadingOpts && (
         <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-100 px-4 py-4">
-          <button
-            onClick={handleNext}
-            disabled={!isAnswerReady || saving}
-            className="w-full bg-orange-400 disabled:bg-gray-200 text-white disabled:text-gray-400 font-semibold py-4 rounded-2xl transition-colors"
-          >
-            {saving
-              ? "保存中にゃ…"
-              : stepIndex === 3
-              ? "完了してリフレクションを見る 🐾"
-              : "次へ →"}
-          </button>
+          {stepIndex === 4 ? (
+            // 全ステップ完了済みだがリフレクションが未表示の場合（競合上書き等のリカバリ）
+            <button
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  const { reflection } = await api.completeSession(sessionId, user.id);
+                  if (reflection?.perUser?.[user.id]) setMyReflectionText(reflection.perUser[user.id]);
+                  const cr = reflection?.difference || reflection?.couple_reflection;
+                  if (cr) setCoupleReflection(cr);
+                  setShowReflection(true);
+                } catch (err) {
+                  alert("リフレクションの取得に失敗しました。もう一度お試しください。\n" + (err?.message || ""));
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              disabled={saving}
+              className="w-full bg-orange-400 disabled:bg-gray-200 text-white disabled:text-gray-400 font-semibold py-4 rounded-2xl transition-colors"
+            >
+              {saving ? "取得中にゃ…" : "リフレクションを確認する 🐾"}
+            </button>
+          ) : (
+            <button
+              onClick={handleNext}
+              disabled={!isAnswerReady || saving}
+              className="w-full bg-orange-400 disabled:bg-gray-200 text-white disabled:text-gray-400 font-semibold py-4 rounded-2xl transition-colors"
+            >
+              {saving
+                ? "保存中にゃ…"
+                : stepIndex === 3
+                ? "完了してリフレクションを見る 🐾"
+                : "次へ →"}
+            </button>
+          )}
         </div>
       )}
 
