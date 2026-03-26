@@ -838,9 +838,8 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
 
     await supabase.from("liff_sessions").update(updateData).eq("id", sessionId);
 
-    // 完了したら次のシナリオを1件追加解放
-    if (session.household_id) {
-      const hh = session.liff_households || {};
+    // 二人とも完了したら次のシナリオを1件追加解放
+    if (partnerDone && session.household_id) {
       const { data: hhData } = await supabase
         .from("liff_households")
         .select("child_birth_year, child_birth_month, has_siblings")
