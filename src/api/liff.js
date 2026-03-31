@@ -829,7 +829,8 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
     const updateData = { reflection: newReflection };
     if (coupleReflectionText) updateData.couple_reflection = coupleReflectionText;
     updateData[isUser1 ? "user1_current_step" : "user2_current_step"] = "completed";
-    if (partnerDone) {
+    const partnerExists = Boolean(partnerId);
+    if (partnerDone || !partnerExists) {
       updateData.status = "completed";
       updateData.completed_at = new Date().toISOString();
     } else {
@@ -838,8 +839,8 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
 
     await supabase.from("liff_sessions").update(updateData).eq("id", sessionId);
 
-    // 二人とも完了したら次のシナリオを1件追加解放
-    if (partnerDone && session.household_id) {
+    // 最初の一人が完了した時点で次のシナリオを1件追加解放（二人目が完了しても追加しない）
+    if (!partnerDone && session.household_id) {
       const { data: hhData } = await supabase
         .from("liff_households")
         .select("child_birth_year, child_birth_month, has_siblings")
