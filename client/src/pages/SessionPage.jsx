@@ -855,20 +855,26 @@ export default function SessionPage() {
       setPartnerCompleted(STEPS.every((s) => partnerSteps.has(s)));
 
       // 完了済みリフレクションを復元
+      const completedSteps = mine.map((a) => a.step);
+      const nextIdx = STEPS.findIndex((s) => !completedSteps.includes(s));
+      const allStepsDone = nextIdx === -1;
+
       if (session.reflection) {
         const perUser = session.reflection.perUser || {};
         if (perUser[user?.id]) {
           setMyReflectionText(perUser[user?.id]);
-          setShowReflection(true);
         }
         // couple_reflection カラムも fallback として参照（競合上書き対策）
         const coupleText = session.reflection.difference || session.couple_reflection;
         if (coupleText) setCoupleReflection(coupleText);
       }
 
-      const completedSteps = mine.map((a) => a.step);
-      const nextIdx = STEPS.findIndex((s) => !completedSteps.includes(s));
-      setStepIndex(nextIdx === -1 ? 4 : nextIdx);
+      // 全ステップ完了済みなら、個別リフレクションの有無にかかわらずリフレクション画面を表示
+      if (allStepsDone) {
+        setShowReflection(true);
+      }
+
+      setStepIndex(allStepsDone ? 4 : nextIdx);
 
       setLoading(false);
     });
@@ -877,6 +883,7 @@ export default function SessionPage() {
   // liff_sessions のカップルリフレクション・パートナー完了をリアルタイム受信
   useEffect(() => {
     if (!sessionId) return;
+    const userId = user?.id;
     const channel = supabase
       .channel(`session-couple:${sessionId}`)
       .on("postgres_changes", {
@@ -884,10 +891,10 @@ export default function SessionPage() {
         filter: `id=eq.${sessionId}`,
       }, (payload) => {
         const cr = payload.new?.couple_reflection;
-        if (cr && !coupleReflection) setCoupleReflection(cr);
+        if (cr) setCoupleReflection(cr);
 
         // パートナーが完了したか確認（子どもレンズのパートナータブ開示用）
-        const partnerField = payload.new?.user1_id === user?.id
+        const partnerField = payload.new?.user1_id === userId
           ? "user2_current_step"
           : "user1_current_step";
         if (payload.new?.[partnerField] === "completed") {
@@ -896,7 +903,20 @@ export default function SessionPage() {
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [sessionId]);
+  }, [sessionId, user?.id]);
+
+  // Realtime が届かない場合のフォールバック:
+  // リフレクション画面でカップルリフレクション待機中、10秒ごとに DB を確認
+  useEffect(() => {
+    if (!showReflection || coupleReflection || !sessionId) return;
+    const interval = setInterval(() => {
+      api.getSession(sessionId).then(({ session }) => {
+        const coupleText = session.reflection?.difference || session.couple_reflection;
+        if (coupleText) setCoupleReflection(coupleText);
+      }).catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [showReflection, coupleReflection, sessionId]);
 
   // 選択肢を自動取得
   // - 親目線: step2〜4 のみ自動取得（step1 は感情選択後に手動）
