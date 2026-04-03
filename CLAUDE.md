@@ -105,7 +105,7 @@ VITE_LINE_OA_ID=          # LINE公式アカウントID（@なし）
 - **ブランチ**: `claude/review-codebase-status-TQflc` で開発・プッシュ
 - **ビルド**: `cd client && npm run build`（public/ に出力される）
 - **DB マイグレーション**: `supabase/migrations/` に SQL を追加し Supabase Dashboard の SQL Editor で実行
-- **シナリオ初回配信**: 1件のみ（完了するごとに1件追加解放）
+- **シナリオ初回配信**: 3件（parentタイプ・異なるカテゴリから選択、is_starter優先）（完了するごとに1件追加解放）
 - **チュートリアル**: `localStorage['kemy_tutorial_seen']` で管理（初回ホーム表示時に表示）
 
 ## 直近の変更履歴
