@@ -117,20 +117,56 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings, 
 
   if (!candidates.length) return;
 
-  let selected;
+  let toInsert;
+
   if (isFirst) {
-    // 初回: is_starter=true のシナリオを優先（カラム未存在時はフォールバック）
-    let starterId = null;
+    // 初回: parent タイプから多様なカテゴリで3件を選択（is_starter 優先）
+    const parentCandidates = candidates.filter((s) => s.session_type === "parent");
+    const pool = parentCandidates.length >= 2 ? parentCandidates : candidates;
+
+    let starterIds = new Set();
     try {
       const { data: starters } = await supabase
         .from("scenes")
         .select("id")
         .eq("is_starter", true)
-        .in("age_group", ageGroups)
-        .limit(1);
-      starterId = starters?.[0]?.id ?? null;
+        .in("age_group", ageGroups);
+      (starters || []).forEach((s) => starterIds.add(s.id));
     } catch { /* is_starter 未マイグレーション時は無視 */ }
-    selected = (starterId ? candidates.find((c) => c.id === starterId) : null) ?? candidates[0];
+
+    // is_starter を先頭に並べてからカテゴリ多様性で3件選ぶ
+    const sorted = [
+      ...pool.filter((c) => starterIds.has(c.id)),
+      ...pool.filter((c) => !starterIds.has(c.id)),
+    ];
+
+    const selectedScenes = [];
+    const usedCategories = new Set();
+    const selectedIds = new Set();
+
+    for (const c of sorted) {
+      if (selectedScenes.length >= 3) break;
+      if (!usedCategories.has(c.category)) {
+        selectedScenes.push(c);
+        usedCategories.add(c.category);
+        selectedIds.add(c.id);
+      }
+    }
+    // カテゴリ多様性が不足する場合は補完
+    for (const c of sorted) {
+      if (selectedScenes.length >= 3) break;
+      if (!selectedIds.has(c.id)) {
+        selectedScenes.push(c);
+        selectedIds.add(c.id);
+      }
+    }
+
+    toInsert = selectedScenes.map((s) => ({
+      household_id: householdId,
+      scenario_id: s.id,
+      status: "new",
+      ...(user1Id ? { user1_id: user1Id } : {}),
+    }));
   } else {
     // 2回目以降: session_type 交互 ＋ 同カテゴリ回避 ＋ ランダム
     const nextType = lastSessionType === "parent" ? "child_lens" : "parent";
@@ -138,16 +174,17 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings, 
     const typePool = altTypeCandidates.length > 0 ? altTypeCandidates : candidates;
     const diffCategory = typePool.filter((s) => s.category !== lastCategory);
     const pool = diffCategory.length > 0 ? diffCategory : typePool;
-    selected = pool[Math.floor(Math.random() * pool.length)];
+    const selected = pool[Math.floor(Math.random() * pool.length)];
+
+    toInsert = [{
+      household_id: householdId,
+      scenario_id: selected.id,
+      status: "new",
+      ...(user1Id ? { user1_id: user1Id } : {}),
+    }];
   }
 
-  const insertData = {
-    household_id: householdId,
-    scenario_id: selected.id,
-    status: "new",
-  };
-  if (user1Id) insertData.user1_id = user1Id;
-  await supabase.from("liff_sessions").insert(insertData);
+  await supabase.from("liff_sessions").insert(toInsert);
 }
 
 // ============================================================
