@@ -327,6 +327,124 @@ function Step3Deep({ options, question, value, onChange }) {
   );
 }
 
+/** Step1: アクション選択（ラジオ + 自由入力）*/
+function StepAction({ options, question, onChange, value }) {
+  const isPreset = (options || []).includes(value?.action);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value?.action || ""));
+  const [showFree, setShowFree] = useState(!isPreset && !!value?.action);
+
+  const selectPreset = (opt) => {
+    setShowFree(false);
+    setFreeText("");
+    onChange({ action: opt, is_custom: false });
+  };
+
+  const selectFree = () => {
+    setShowFree(true);
+    onChange({ action: freeText, is_custom: true });
+  };
+
+  const handleFreeText = (text) => {
+    setFreeText(text);
+    onChange({ action: text, is_custom: true });
+  };
+
+  return (
+    <div className="space-y-3">
+      {question && (
+        <div className="bg-orange-50 rounded-2xl px-4 py-3 mb-4">
+          <p className="text-sm text-orange-700">{question}</p>
+        </div>
+      )}
+      {(options || []).map((opt) => (
+        <button
+          key={opt}
+          onClick={() => selectPreset(opt)}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value?.action === opt && !showFree ? "border-orange-400 bg-orange-50" : "border-gray-100 bg-white"}`}
+        >
+          <span className="text-sm text-gray-700">{opt}</span>
+        </button>
+      ))}
+      <div
+        className={`border-2 rounded-xl p-3 transition-colors
+          ${showFree ? "border-orange-400 bg-orange-50" : "border-dashed border-gray-200 bg-white"}`}
+      >
+        <p className="text-xs text-gray-400 mb-2 cursor-pointer" onClick={selectFree}>
+          または自分の言葉で
+        </p>
+        <textarea
+          rows={2}
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onFocus={selectFree}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none resize-none"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Step3: 意図選択（ラジオ + 自由入力）*/
+function StepIntent({ options, question, onChange, value }) {
+  const isPreset = (options || []).includes(value?.intent);
+  const [freeText, setFreeText] = useState(isPreset ? "" : (value?.intent || ""));
+  const [showFree, setShowFree] = useState(!isPreset && !!value?.intent);
+
+  const selectPreset = (opt) => {
+    setShowFree(false);
+    setFreeText("");
+    onChange({ intent: opt, is_custom: false });
+  };
+
+  const selectFree = () => {
+    setShowFree(true);
+    onChange({ intent: freeText, is_custom: true });
+  };
+
+  const handleFreeText = (text) => {
+    setFreeText(text);
+    onChange({ intent: text, is_custom: true });
+  };
+
+  return (
+    <div className="space-y-3">
+      {question && (
+        <div className="bg-green-50 rounded-2xl px-4 py-3 mb-4">
+          <p className="text-sm text-green-700">{question}</p>
+        </div>
+      )}
+      {(options || []).map((opt) => (
+        <button
+          key={opt}
+          onClick={() => selectPreset(opt)}
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-colors
+            ${value?.intent === opt && !showFree ? "border-green-400 bg-green-50" : "border-gray-100 bg-white"}`}
+        >
+          <span className="text-sm text-gray-700">{opt}</span>
+        </button>
+      ))}
+      <div
+        className={`border-2 rounded-xl p-3 transition-colors
+          ${showFree ? "border-green-400 bg-green-50" : "border-dashed border-gray-200 bg-white"}`}
+      >
+        <p className="text-xs text-gray-400 mb-2 cursor-pointer" onClick={selectFree}>
+          または自分の言葉で
+        </p>
+        <textarea
+          rows={2}
+          placeholder="自由に書いてにゃ…"
+          value={freeText}
+          onFocus={selectFree}
+          onChange={(e) => handleFreeText(e.target.value)}
+          className="w-full text-sm text-gray-700 bg-transparent outline-none resize-none"
+        />
+      </div>
+    </div>
+  );
+}
+
 /** Step4: ラジオ選択 + 自由入力 */
 function Step4({ options, question, onChange, value }) {
   const FREE_LABEL = "自分の言葉で書く";
@@ -616,28 +734,30 @@ function PartnerTab({ partnerAnswers, isChildLens, partnerCompleted }) {
     );
   }
 
+  const stepLabels = {
+    step1: "Step 1: アクション",
+    step2: "Step 2: 気持ち",
+    step3: "Step 3: 意図",
+    step4: "Step 4: スクリプト",
+  };
   return (
     <div className="space-y-4">
       {partnerAnswers.map((a) => (
         <div key={a.step} className="bg-white rounded-2xl p-4 border border-gray-100">
-          <p className="text-xs font-medium text-gray-400 mb-2">
-            {a.step === "step1" ? "Step1: 気持ち" :
-             a.step === "step2" ? "Step2: 価値観" :
-             a.step === "step3" ? "Step3: 原体験" : "Step4: 関わり方"}
-          </p>
-          {a.step === "step1" && a.answer?.emotion ? (
-            <div className="text-sm text-gray-700 space-y-1">
-              <p>感情: {a.answer.emotion}（{a.answer.intensity}/10）</p>
-              {a.answer.thought && <p>想い: {a.answer.thought}</p>}
-            </div>
-          ) : (
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-              {JSON.stringify(a.answer, null, 2)
-                .replace(/[{}"\[\]]/g, "")
-                .replace(/,\n/g, "\n")
-                .trim()}
-            </pre>
-          )}
+          <p className="text-xs font-medium text-gray-400 mb-2">{stepLabels[a.step] || a.step}</p>
+          <div className="text-sm text-gray-700 space-y-1">
+            {a.step === "step1" && <p>{a.answer?.action}</p>}
+            {a.step === "step2" && a.answer?.emotion && (
+              <>
+                <p>感情: {a.answer.emotion}（{a.answer.intensity}/10）</p>
+                {a.answer.thought && <p>想い: {a.answer.thought}</p>}
+              </>
+            )}
+            {a.step === "step3" && <p>{a.answer?.intent}</p>}
+            {a.step === "step4" && (
+              <p>{Array.isArray(a.answer?.values) ? a.answer.values.join("、") : a.answer?.value}</p>
+            )}
+          </div>
         </div>
       ))}
     </div>
@@ -656,7 +776,11 @@ function renderAnswer(step, answer, isChildLens) {
     if (step === "step3") return <span>{answer.feeling}</span>;
     if (step === "step4") return <span>{answer.ideal}</span>;
   } else {
+    // 新フロー: step1=アクション, step2=感情, step3=意図, step4=スクリプト
     if (step === "step1") {
+      return <span>{answer.action || "（未回答）"}</span>;
+    }
+    if (step === "step2") {
       if (!answer.emotion) return <span>感情なし</span>;
       return (
         <>
@@ -667,30 +791,12 @@ function renderAnswer(step, answer, isChildLens) {
         </>
       );
     }
-    if (step === "step2") {
-      const vals = Array.isArray(answer.values) ? answer.values : [];
-      return <span>{vals.join("、")}</span>;
-    }
     if (step === "step3") {
-      return (
-        <>
-          <span>{answer.background}</span>
-          {answer.deepening2 && <span className="block mt-1 text-gray-500">{answer.deepening2}</span>}
-          {answer.deepening3 && <span className="block mt-1 text-gray-500">{answer.deepening3}</span>}
-        </>
-      );
+      return <span>{answer.intent || "（未回答）"}</span>;
     }
     if (step === "step4") {
-      // 新形式 { choice } を優先、旧形式 { priorities } にも対応
-      if (answer.choice) return <span>{answer.choice}</span>;
-      const priorities = Array.isArray(answer.priorities)
-        ? [...answer.priorities].sort((a, b) => a.rank - b.rank)
-        : [];
-      return (
-        <ol className="list-decimal list-inside space-y-0.5">
-          {priorities.map((p, i) => <li key={i}>{p.value}</li>)}
-        </ol>
-      );
+      const vals = Array.isArray(answer.values) ? answer.values : [];
+      return <span>{vals.join("、") || "（未回答）"}</span>;
     }
   }
   return null;
@@ -713,10 +819,10 @@ function ReflectionView({ myReflectionText, coupleReflection, onHome, myAnswers,
         { key: "step4", label: "Step D: 理想像" },
       ]
     : [
-        { key: "step1", label: "Step 1: 気持ち" },
-        { key: "step2", label: "Step 2: 価値観" },
-        { key: "step3", label: "Step 3: 原体験" },
-        { key: "step4", label: "Step 4: 関わり方" },
+        { key: "step1", label: "Step 1: アクション" },
+        { key: "step2", label: "Step 2: 気持ち" },
+        { key: "step3", label: "Step 3: 意図" },
+        { key: "step4", label: "Step 4: スクリプト" },
       ];
 
   return (
@@ -813,15 +919,11 @@ export default function SessionPage() {
   const [session,    setSession]    = useState(null);
   const [myAnswers,  setMyAnswers]  = useState({});
   const [stepIndex,  setStepIndex]  = useState(0);
-  const [step1SubStep, setStep1SubStep] = useState(0); // 0=emotion 1=intensity 2=thought
-  const [step3SubStep, setStep3SubStep] = useState(0); // 0=background 1=deep2 2=deep3
-  const [step3DeepOptions, setStep3DeepOptions] = useState(null);
-  const [step3DeepQuestion, setStep3DeepQuestion] = useState(null);
-  const [step3DeepAnswer, setStep3DeepAnswer] = useState({ deepening2: "", deepening3: "" });
+  // step2（感情）のサブステップ: 0=emotion type, 1=intensity, 2=thought
+  const [step2SubStep, setStep2SubStep] = useState(0);
   const [tab,        setTab]        = useState("me");
   const [options,    setOptions]    = useState(null);
   const [question,   setQuestion]   = useState(null);
-  const [step4ConcreteLevel, setStep4ConcreteLevel] = useState(null);
   const [loadingOpts,setLoadingOpts]= useState(false);
   const [saving,     setSaving]     = useState(false);
   const [myReflectionText,  setMyReflectionText]  = useState(null);
@@ -831,8 +933,8 @@ export default function SessionPage() {
   const [confirmExit, setConfirmExit] = useState(false);
   const [partnerCompleted, setPartnerCompleted] = useState(false);
 
-  // Step1 の一時状態（サブステップ間で保持）
-  const [step1Draft, setStep1Draft] = useState({ emotion: "", intensity: null, thought: "" });
+  // Step2（感情）の一時状態（サブステップ間で保持）
+  const [step2Draft, setStep2Draft] = useState({ emotion: "", intensity: null, thought: "" });
 
   const isChildLens = session?.scenario?.session_type === "child_lens";
 
@@ -967,14 +1069,13 @@ export default function SessionPage() {
           .finally(() => setLoadingOpts(false));
       }
     } else {
-      // 親目線: step1 は手動、step2〜4 は自動取得
-      if (stepIndex === 0) return;
+      // 親目線: step2（感情）は手動サブステップ処理、それ以外は自動取得
+      if (stepIndex === 1) return; // 感情 step は手動で thought オプションを取得
       setLoadingOpts(true);
       api.getOptions(sessionId, step, user?.id)
-        .then(({ options, question, concreteness_level }) => {
+        .then(({ options, question }) => {
           setOptions(options);
           setQuestion(question);
-          if (concreteness_level) setStep4ConcreteLevel(concreteness_level);
         })
         .finally(() => setLoadingOpts(false));
     }
@@ -994,18 +1095,18 @@ export default function SessionPage() {
       if (currentStep === "step4") return !!currentAnswer?.ideal;
       return false;
     }
-    // 親目線
-    if (stepIndex === 0) {
-      if (step1SubStep === 0) return !!step1Draft.emotion;
-      if (step1SubStep === 1) return step1Draft.intensity !== null;
-      return !!step1Draft.thought;
+    // 親目線（新フロー: step1=アクション, step2=感情, step3=意図, step4=スクリプト）
+    if (stepIndex === 0) return !!currentAnswer?.action;  // アクション
+    if (stepIndex === 1) {                                  // 感情（サブステップ）
+      if (step2SubStep === 0) return !!step2Draft.emotion;
+      if (step2SubStep === 1) return step2Draft.intensity !== null;
+      return !!step2Draft.thought;
     }
-    if (stepIndex === 2) { // step3
-      if (step3SubStep === 0) return !!currentAnswer?.background;
-      if (step3SubStep === 1) return !!step3DeepAnswer.deepening2;
-      if (step3SubStep === 2) return !!step3DeepAnswer.deepening3;
+    if (stepIndex === 2) return !!currentAnswer?.intent;   // 意図
+    if (stepIndex === 3) {                                  // スクリプト
+      const vals = Array.isArray(currentAnswer?.values) ? currentAnswer.values : [];
+      return vals.length > 0;
     }
-    if (stepIndex === 3) return !!currentAnswer?.choice; // step4: 新形式
     return !!currentAnswer;
   })();
 
@@ -1038,132 +1139,54 @@ export default function SessionPage() {
       return;
     }
 
-    // ── 親目線: Step1 サブステップの処理 ──
-    if (stepIndex === 0) {
-      if (step1SubStep === 0) {
+    // ── 親目線: Step2（感情）サブステップの処理 ──
+    if (stepIndex === 1) {
+      if (step2SubStep === 0) {
         // 「特に感情はない」は強度ステップをスキップして想いへ
-        if (step1Draft.emotion === "特に感情はない") {
+        if (step2Draft.emotion === "特に感情はない") {
           setLoadingOpts(true);
           try {
-            const { options } = await api.getOptions(sessionId, "step1", user?.id, {
-              emotion: step1Draft.emotion,
+            const { options } = await api.getOptions(sessionId, "step2", user?.id, {
+              emotion: step2Draft.emotion,
               intensity: 0,
             });
             setOptions(options);
-            setStep1Draft((d) => ({ ...d, intensity: 0 }));
-            setStep1SubStep(2);
+            setStep2Draft((d) => ({ ...d, intensity: 0 }));
+            setStep2SubStep(2);
           } finally {
             setLoadingOpts(false);
           }
           return;
         }
-        setStep1SubStep(1);
+        setStep2SubStep(1);
         return;
       }
-      if (step1SubStep === 1) {
-        // Step1-3 の選択肢を取得してから Sub-step 2 へ
+      if (step2SubStep === 1) {
+        // thought 選択肢を取得してから Sub-step 2 へ
         setLoadingOpts(true);
         try {
-          const { options } = await api.getOptions(sessionId, "step1", user?.id, {
-            emotion: step1Draft.emotion,
-            intensity: step1Draft.intensity,
+          const { options } = await api.getOptions(sessionId, "step2", user?.id, {
+            emotion: step2Draft.emotion,
+            intensity: step2Draft.intensity,
           });
           setOptions(options);
-          setStep1SubStep(2);
+          setStep2SubStep(2);
         } finally {
           setLoadingOpts(false);
         }
         return;
       }
-      // step1SubStep === 2: thought 選択済み → 保存して step2 へ
-    }
-
-    // ── 親目線: Step3 深掘りサブステップ ──
-    if (!isChildLens && stepIndex === 2) {
-      if (step3SubStep === 0) {
-        if (!isAnswerReady) return;
-        setSaving(true);
-        try {
-          // 初回選択を DB に保存（step3_2 生成時に読み込まれる）
-          await api.saveAnswer(sessionId, user.id, "step3", { background: currentAnswer.background });
-          setMyAnswers((prev) => ({ ...prev, step3: { background: currentAnswer.background } }));
-          setLoadingOpts(true);
-          const { options: deepOpts, question: deepQ } = await api.getOptions(sessionId, "step3_2", user?.id);
-          setStep3DeepOptions(deepOpts);
-          setStep3DeepQuestion(deepQ);
-          setStep3SubStep(1);
-        } finally {
-          setSaving(false);
-          setLoadingOpts(false);
-        }
-        return;
-      }
-
-      if (step3SubStep === 1) {
-        if (!isAnswerReady) return;
-        const isSkip = step3DeepAnswer.deepening2.includes("次に進みたい");
-        if (isSkip) {
-          setStep3SubStep(0);
-          setStep3DeepOptions(null);
-          setStep3DeepQuestion(null);
-          setStep3DeepAnswer({ deepening2: "", deepening3: "" });
-          setOptions(null);
-          setQuestion(null);
-          setStepIndex((i) => i + 1);
-          return;
-        }
-        setSaving(true);
-        try {
-          const updated = { background: myAnswers.step3?.background, deepening2: step3DeepAnswer.deepening2 };
-          await api.saveAnswer(sessionId, user.id, "step3", updated);
-          setMyAnswers((prev) => ({ ...prev, step3: updated }));
-          setLoadingOpts(true);
-          const { options: deepOpts3, question: deepQ3 } = await api.getOptions(sessionId, "step3_3", user?.id);
-          setStep3DeepOptions(deepOpts3);
-          setStep3DeepQuestion(deepQ3);
-          setStep3SubStep(2);
-        } finally {
-          setSaving(false);
-          setLoadingOpts(false);
-        }
-        return;
-      }
-
-      if (step3SubStep === 2) {
-        if (!isAnswerReady) return;
-        const isSkip = step3DeepAnswer.deepening3.includes("次に進みたい");
-        if (!isSkip) {
-          setSaving(true);
-          try {
-            const updated = { ...myAnswers.step3, deepening3: step3DeepAnswer.deepening3 };
-            await api.saveAnswer(sessionId, user.id, "step3", updated);
-            setMyAnswers((prev) => ({ ...prev, step3: updated }));
-          } finally {
-            setSaving(false);
-          }
-        }
-        setStep3SubStep(0);
-        setStep3DeepOptions(null);
-        setStep3DeepQuestion(null);
-        setStep3DeepAnswer({ deepening2: "", deepening3: "" });
-        setOptions(null);
-        setQuestion(null);
-        setStepIndex((i) => i + 1);
-        return;
-      }
+      // step2SubStep === 2: thought 選択済み → 保存して step3 へ
     }
 
     if (!isAnswerReady) return;
     setSaving(true);
     try {
-      const answerToSave = stepIndex === 0
-        ? { emotion: step1Draft.emotion, intensity: step1Draft.intensity, thought: step1Draft.thought }
+      const answerToSave = stepIndex === 1
+        ? { emotion: step2Draft.emotion, intensity: step2Draft.intensity, thought: step2Draft.thought }
         : currentAnswer;
 
-      const extraMeta = (currentStep === "step4" && step4ConcreteLevel)
-        ? { concreteness_level: step4ConcreteLevel }
-        : {};
-      await api.saveAnswer(sessionId, user.id, currentStep, answerToSave, extraMeta);
+      await api.saveAnswer(sessionId, user.id, currentStep, answerToSave);
       setMyAnswers((prev) => ({ ...prev, [currentStep]: answerToSave }));
 
       if (stepIndex === 3) {
@@ -1175,8 +1198,8 @@ export default function SessionPage() {
       } else {
         setOptions(null);
         setQuestion(null);
-        setStep1SubStep(0);
-        setStep1Draft({ emotion: "", intensity: null, thought: "" });
+        setStep2SubStep(0);
+        setStep2Draft({ emotion: "", intensity: null, thought: "" });
         setStepIndex((i) => i + 1);
       }
     } catch (err) {
@@ -1194,15 +1217,13 @@ export default function SessionPage() {
     (a) => !Object.keys(myAnswers).includes(a.step)
   ).length;
 
-  // ヘッダーラベル
+  // ヘッダーラベル（新フロー: step1=アクション, step2=感情, step3=意図, step4=スクリプト）
   const stepLabel = showReflection ? "リフレクション" :
     isChildLens
       ? (["Step A: 行動予測", "Step B: 根拠", "Step C: 感情", "Step D: 理想像", "完了"][stepIndex] || "完了")
-      : stepIndex === 0
-        ? ["気持ちを選ぶ", "感じた強さ", "どう思った？"][step1SubStep]
-        : stepIndex === 2 && step3SubStep > 0
-          ? `Step 3/4: 深掘り (${step3SubStep}/2)`
-          : ["Step 2/4", "Step 3/4", "Step 4/4", "完了"][stepIndex - 1];
+      : stepIndex === 1
+        ? ["気持ちを選ぶ", "感じた強さ", "どう思った？"][step2SubStep]
+        : (["Step 1/4: アクション", "Step 2/4: 気持ち", "Step 3/4: 意図", "Step 4/4: スクリプト", "完了"][stepIndex] || "完了");
 
   // ============================================================
   // UI
@@ -1289,7 +1310,7 @@ export default function SessionPage() {
               <p className="text-sm text-gray-400">けみーが考え中にゃ…</p>
             </motion.div>
           ) : (
-            <motion.div key={`${currentStep}-${step1SubStep}`}
+            <motion.div key={`${currentStep}-${step2SubStep}`}
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
             >
               {/* ── 子どもレンズ ── */}
@@ -1324,63 +1345,47 @@ export default function SessionPage() {
                 />
               )}
 
-              {/* ── 親目線 ── */}
-              {!isChildLens && currentStep === "step1" && step1SubStep === 0 && (
-                <Step1Emotion
-                  value={step1Draft.emotion}
-                  onChange={(e) => setStep1Draft((d) => ({ ...d, emotion: e }))}
-                />
-              )}
-              {!isChildLens && currentStep === "step1" && step1SubStep === 1 && (
-                <Step1Intensity
-                  emotion={step1Draft.emotion}
-                  value={step1Draft.intensity}
-                  onChange={(v) => setStep1Draft((d) => ({ ...d, intensity: v }))}
-                />
-              )}
-              {!isChildLens && currentStep === "step1" && step1SubStep === 2 && (
-                <Step1Thought
-                  emotion={step1Draft.emotion}
-                  intensity={step1Draft.intensity}
-                  options={options}
-                  value={step1Draft.thought}
-                  onChange={(t) => setStep1Draft((d) => ({ ...d, thought: t }))}
-                />
-              )}
-              {!isChildLens && currentStep === "step2" && (
-                <Step2
+              {/* ── 親目線（新フロー: step1=アクション, step2=感情, step3=意図, step4=スクリプト）── */}
+              {!isChildLens && currentStep === "step1" && (
+                <StepAction
                   options={options}
                   question={question}
                   value={currentAnswer}
-                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step2: v }))}
+                  onChange={(v) => setMyAnswers((prev) => ({ ...prev, step1: v }))}
                 />
               )}
-              {!isChildLens && currentStep === "step3" && step3SubStep === 0 && (
-                <Step3
+              {!isChildLens && currentStep === "step2" && step2SubStep === 0 && (
+                <Step1Emotion
+                  value={step2Draft.emotion}
+                  onChange={(e) => setStep2Draft((d) => ({ ...d, emotion: e }))}
+                />
+              )}
+              {!isChildLens && currentStep === "step2" && step2SubStep === 1 && (
+                <Step1Intensity
+                  emotion={step2Draft.emotion}
+                  value={step2Draft.intensity}
+                  onChange={(v) => setStep2Draft((d) => ({ ...d, intensity: v }))}
+                />
+              )}
+              {!isChildLens && currentStep === "step2" && step2SubStep === 2 && (
+                <Step1Thought
+                  emotion={step2Draft.emotion}
+                  intensity={step2Draft.intensity}
+                  options={options}
+                  value={step2Draft.thought}
+                  onChange={(t) => setStep2Draft((d) => ({ ...d, thought: t }))}
+                />
+              )}
+              {!isChildLens && currentStep === "step3" && (
+                <StepIntent
                   options={options}
                   question={question}
                   value={currentAnswer}
                   onChange={(v) => setMyAnswers((prev) => ({ ...prev, step3: v }))}
                 />
               )}
-              {!isChildLens && currentStep === "step3" && step3SubStep === 1 && (
-                <Step3Deep
-                  options={step3DeepOptions}
-                  question={step3DeepQuestion}
-                  value={step3DeepAnswer.deepening2}
-                  onChange={(v) => setStep3DeepAnswer((prev) => ({ ...prev, deepening2: v }))}
-                />
-              )}
-              {!isChildLens && currentStep === "step3" && step3SubStep === 2 && (
-                <Step3Deep
-                  options={step3DeepOptions}
-                  question={step3DeepQuestion}
-                  value={step3DeepAnswer.deepening3}
-                  onChange={(v) => setStep3DeepAnswer((prev) => ({ ...prev, deepening3: v }))}
-                />
-              )}
               {!isChildLens && currentStep === "step4" && (
-                <Step4
+                <Step2
                   options={options}
                   question={question}
                   value={currentAnswer}

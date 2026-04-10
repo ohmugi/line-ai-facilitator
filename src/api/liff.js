@@ -4,9 +4,10 @@ import { Router } from "express";
 import axios from "axios";
 import { supabase } from "../supabase/client.js";
 import { generateStep1Options } from "../ai/generateStep1.js";
-import { generateStep2Options } from "../ai/generateStep2.js";
-import { generateStep3Options } from "../ai/generateStep3.js";
-import { generateStep4Options, detectConcretenesslevel } from "../ai/generateStep4.js";
+import { generateStepActionOptions } from "../ai/generateStepAction.js";
+import { generateStepIntentQuestion, generateStepIntentOptions } from "../ai/generateStepIntent.js";
+import { generateStepScriptQuestion, generateStepScriptOptions } from "../ai/generateStepScript.js";
+import { generatePersonalityTraits } from "../ai/generatePersonalityTraits.js";
 import { generateReflection } from "../ai/generateReflection.js";
 import { generateCoupleReflection } from "../ai/generateCoupleReflection.js";
 import { generateChildLensStepAOptions } from "../ai/generateChildLensStepA.js";
@@ -538,14 +539,21 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
     }
 
     // ============================================================
-    // 既存の親目線 (parent) セッション用選択肢生成
+    // 親目線 (parent) セッション用選択肢生成
+    // 新フロー: step1=アクション、step2=感情の想い、step3=意図、step4=スクリプト
     // ============================================================
 
-    // Step1-3: emotion + intensity を踏まえた想い・考えを生成（ユーザー別、キャッシュなし）
+    // Step1: アクション選択肢（AIが生成）
     if (step === "step1") {
+      const options = await generateStepActionOptions({ sceneText });
+      return res.json({ options, question: "この場面で、どうしてあげたいと思う？" });
+    }
+
+    // Step2: 感情の想い（emotion + intensity を踏まえた想い・考え）
+    if (step === "step2") {
       const { emotion, intensity } = req.query;
       if (!emotion) {
-        return res.status(400).json({ error: "emotion required" });
+        return res.status(400).json({ error: "emotion required for step2 thought options" });
       }
       const options = await generateStep1Options({
         sceneText,
@@ -555,7 +563,7 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
       return res.json({ options, question: null });
     }
 
-    // Step2〜4: ユーザーの回答をコンテキストに生成
+    // Step3〜4: ユーザーの回答をコンテキストに生成
     const { data: answers } = await supabase
       .from("session_answers")
       .select("step, answer")
@@ -564,10 +572,10 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
 
     const byStep = Object.fromEntries((answers || []).map((a) => [a.step, a.answer]));
 
-    // Step1の感情・強度・想いを統合してコンテキスト文字列化
-    const buildEmotionContext = (s1) => {
-      if (!s1) return "";
-      const { emotion, intensity, thought } = s1;
+    // Step2（感情）の回答をコンテキスト文字列化
+    const buildEmotionContext = (s2) => {
+      if (!s2) return "";
+      const { emotion, intensity, thought } = s2;
       if (emotion && intensity && thought) {
         const lbl = intensity <= 3 ? "少し" : intensity <= 5 ? "そこそこ" : intensity <= 7 ? "かなり" : "とても強く";
         return `${emotion}を${lbl}（${intensity}/10）感じ、「${thought}」と思っている`;
@@ -583,53 +591,25 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
       .maybeSingle();
     const userName = userData?.display_name || "あなた";
 
-    if (step === "step2") {
-      const emotionAnswer = buildEmotionContext(byStep.step1);
-      const options = await generateStep2Options({ sceneText, emotionAnswer });
-      const question = await import("../ai/generateStep2.js")
-        .then((m) => m.generateStep2Question({ sceneText, emotionAnswer, userName }));
-      return res.json({ options, question });
-    }
-
     if (step === "step3") {
-      const emotionAnswer = buildEmotionContext(byStep.step1);
-      const valueChoice   = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
-      const options = await generateStep3Options({ sceneText, emotionAnswer, valueChoice });
-      const question = await import("../ai/generateStep3.js")
-        .then((m) => m.generateStep3Question({ sceneText, emotionAnswer, valueChoice, userName }));
-      return res.json({ options, question });
-    }
-
-    if (step === "step3_2") {
-      const { generateStep3_2Question, generateStep3_2Options } = await import("../ai/generateStep3Deep.js");
-      const emotionAnswer  = buildEmotionContext(byStep.step1);
-      const valueChoice    = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
-      const initialAnswer  = byStep.step3?.background || "";
-      const question = await generateStep3_2Question({ sceneText, emotionAnswer, valueChoice, initialAnswer, userName });
-      const options  = await generateStep3_2Options({ sceneText, initialAnswer, question });
-      return res.json({ options, question });
-    }
-
-    if (step === "step3_3") {
-      const { generateStep3_3Question, generateStep3_3Options } = await import("../ai/generateStep3Deep.js");
-      const emotionAnswer  = buildEmotionContext(byStep.step1);
-      const valueChoice    = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
-      const initialAnswer  = byStep.step3?.background || "";
-      const step3_2Answer  = byStep.step3?.deepening2 || "";
-      const question = await generateStep3_3Question({ sceneText, emotionAnswer, valueChoice, initialAnswer, step3_2Answer, userName });
-      const options  = await generateStep3_3Options({ sceneText, initialAnswer, step3_2Answer, question });
+      const actionChoice  = byStep.step1?.action || "";
+      const emotionAnswer = buildEmotionContext(byStep.step2);
+      const [options, question] = await Promise.all([
+        generateStepIntentOptions({ sceneText, actionChoice, emotionAnswer }),
+        generateStepIntentQuestion({ sceneText, actionChoice, emotionAnswer, userName }),
+      ]);
       return res.json({ options, question });
     }
 
     if (step === "step4") {
-      const emotionAnswer    = buildEmotionContext(byStep.step1);
-      const valueChoice      = Array.isArray(byStep.step2?.values) ? byStep.step2.values.join("、") : (byStep.step2?.value || "");
-      const backgroundChoice = byStep.step3?.background || "";
-      const concreteness_level = detectConcretenesslevel({ emotionAnswer, valueChoice, backgroundChoice });
-      const options = await generateStep4Options({ sceneText, emotionAnswer, valueChoice, backgroundChoice, concreteness_level });
-      const question = await import("../ai/generateStep4.js")
-        .then((m) => m.generateStep4Question({ sceneText, emotionAnswer, valueChoice, backgroundChoice, userName, concreteness_level }));
-      return res.json({ options, question, concreteness_level });
+      const actionChoice  = byStep.step1?.action || "";
+      const emotionAnswer = buildEmotionContext(byStep.step2);
+      const intentChoice  = byStep.step3?.intent || "";
+      const [options, question] = await Promise.all([
+        generateStepScriptOptions({ sceneText, actionChoice, emotionAnswer, intentChoice }),
+        generateStepScriptQuestion({ sceneText, actionChoice, emotionAnswer, intentChoice, userName }),
+      ]);
+      return res.json({ options, question });
     }
 
     return res.status(400).json({ error: `Unknown step: ${step}` });
@@ -799,50 +779,97 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
         });
       }
     } else {
-      // ── 既存の親目線 個別リフレクション ──
-      const s1 = myAns.step1 || {};
-      const emotionAnswer = s1.emotion && s1.intensity && s1.thought
-        ? (() => {
-            const lbl = s1.intensity <= 3 ? "少し" : s1.intensity <= 5 ? "そこそこ" : s1.intensity <= 7 ? "かなり" : "とても強く";
-            return `${s1.emotion}を${lbl}（${s1.intensity}/10）感じ、「${s1.thought}」と思っている`;
-          })()
-        : s1.thought || s1.emotion || "";
+      // ── 親目線 個別リフレクション（新フロー: step1=アクション, step2=感情, step3=意図, step4=スクリプト）──
+      const buildEmotionCtx = (s2) => {
+        if (!s2) return "";
+        const { emotion, intensity, thought } = s2;
+        if (emotion && intensity && thought) {
+          const lbl = intensity <= 3 ? "少し" : intensity <= 5 ? "そこそこ" : intensity <= 7 ? "かなり" : "とても強く";
+          return `${emotion}を${lbl}（${intensity}/10）感じ、「${thought}」と思っている`;
+        }
+        return thought || emotion || "";
+      };
 
-      // Step4: 新形式 { choice } を優先、旧形式 { priorities } にも対応
-      const visionChoice = myAns.step4?.choice
-        || (Array.isArray(myAns.step4?.priorities) ? myAns.step4.priorities.map((p) => p.value).join("、") : "")
-        || myAns.step4?.vision
-        || "";
+      const actionChoice  = myAns.step1?.action || "";
+      const emotionAnswer = buildEmotionCtx(myAns.step2);
+      const intentChoice  = myAns.step3?.intent || "";
+      const scriptValues  = Array.isArray(myAns.step4?.values) ? myAns.step4.values.join("、") : (myAns.step4?.value || "");
 
-      if (emotionAnswer) {
+      if (actionChoice || emotionAnswer) {
+        // 個性特定（DB から全トレイトを取得）
+        let identifiedTraits = [];
+        try {
+          const { data: allTraits } = await supabase
+            .from("personality_traits")
+            .select("name, description, category");
+
+          if (allTraits?.length) {
+            const { identified, newTrait } = await generatePersonalityTraits({
+              sceneText,
+              actionChoice,
+              emotionAnswer,
+              intentChoice,
+              scriptValues,
+              availableTraits: allTraits,
+              userName: myName,
+            });
+            identifiedTraits = identified;
+
+            // 新しい個性を DB に追加
+            if (newTrait?.name) {
+              const { data: inserted } = await supabase
+                .from("personality_traits")
+                .insert({ name: newTrait.name, description: newTrait.description, category: newTrait.category })
+                .select("id")
+                .maybeSingle();
+              if (inserted?.id) identifiedTraits = [...identifiedTraits, newTrait.name];
+            }
+
+            // セッション×ユーザーの個性を保存
+            if (identifiedTraits.length > 0) {
+              const { data: traitRows } = await supabase
+                .from("personality_traits")
+                .select("id, name")
+                .in("name", identifiedTraits);
+              if (traitRows?.length) {
+                await supabase.from("session_user_traits").upsert(
+                  traitRows.map((t) => ({ session_id: sessionId, user_id: userId, trait_id: t.id })),
+                  { onConflict: "session_id,user_id,trait_id" }
+                );
+              }
+            }
+          }
+        } catch (traitErr) {
+          console.error("[complete/personality_traits]", traitErr);
+        }
+
         myReflectionText = await generateReflection({
           sceneText,
+          actionChoice,
           emotionAnswer,
-          valueChoice:      Array.isArray(myAns.step2?.values) ? myAns.step2.values.join("、") : (myAns.step2?.value || ""),
-          backgroundChoice: myAns.step3?.background || "",
-          visionChoice,
+          intentChoice,
+          scriptValues,
+          identifiedTraits,
           userName: myName,
         });
       }
 
-      // ── 既存の親目線 カップルリフレクション ──
+      // ── 親目線 カップルリフレクション ──
       if (partnerDone && byUser[partnerId]) {
         const partnerAns = byUser[partnerId];
-        const partnerVision = partnerAns.step4?.choice
-          || (Array.isArray(partnerAns.step4?.priorities) ? partnerAns.step4.priorities.map((p) => p.value).join("、") : "")
-          || partnerAns.step4?.vision
-          || "";
 
         coupleReflectionText = await generateCoupleReflection({
           sceneText,
-          user1Name:  isUser1 ? myName : partnerName,
-          user1Step1: isUser1 ? myAns.step1 : partnerAns.step1,
-          user1Step2: isUser1 ? myAns.step2 : partnerAns.step2,
-          user1Step4: isUser1 ? { choice: visionChoice } : { choice: partnerVision },
-          user2Name:  isUser1 ? partnerName : myName,
+          user1Name:  isUser1 ? myName      : partnerName,
+          user1Step1: isUser1 ? myAns.step1  : partnerAns.step1,
+          user1Step2: isUser1 ? myAns.step2  : partnerAns.step2,
+          user1Step3: isUser1 ? myAns.step3  : partnerAns.step3,
+          user1Step4: isUser1 ? myAns.step4  : partnerAns.step4,
+          user2Name:  isUser1 ? partnerName  : myName,
           user2Step1: isUser1 ? partnerAns.step1 : myAns.step1,
           user2Step2: isUser1 ? partnerAns.step2 : myAns.step2,
-          user2Step4: isUser1 ? { choice: partnerVision } : { choice: visionChoice },
+          user2Step3: isUser1 ? partnerAns.step3 : myAns.step3,
+          user2Step4: isUser1 ? partnerAns.step4 : myAns.step4,
         });
       }
     }
