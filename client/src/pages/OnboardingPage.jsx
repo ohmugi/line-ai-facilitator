@@ -164,8 +164,11 @@ export default function OnboardingPage() {
         <h2 className="text-base font-semibold text-gray-700 mb-1">
           お子さんの生まれ年月を教えてくれるかにゃ？🐾
         </h2>
-        <p className="text-xs text-gray-400 mb-6">
-          年齢に合ったシナリオをお届けするにゃ。後からでも変更できるにゃ。
+        <p className="text-xs text-gray-400 mb-1">
+          年齢に合った育児シナリオをお届けするにゃ。後からでも変更できるにゃ。
+        </p>
+        <p className="text-xs text-orange-400 mb-6">
+          ※ お子さんが二人以上いる場合は、いちばん上の子の生まれ年月を入力してにゃ🐾
         </p>
 
         {/* 年 */}
