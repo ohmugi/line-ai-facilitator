@@ -1384,7 +1384,7 @@ export default function SessionPage() {
     (a) => !Object.keys(myAnswers).includes(a.step)
   ).length;
 
-  // ヘッダーラベル
+  // ヘッダーラベル（新フロー: step1=アクション, step2=感情, step3=意図, step4=スクリプト）
   const stepLabel = showReflection ? "リフレクション" :
     isGeneral
       ? (["Step 1/3: どうする？", "Step 2/3: なぜ？", "Step 3/3: 守りたいもの", "完了"][stepIndex] || "完了")
