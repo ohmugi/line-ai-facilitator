@@ -8,6 +8,16 @@ import { api } from "../api/client";
 import { supabase } from "../api/supabase";
 
 // ============================================================
+// ドメイン定義
+// ============================================================
+const DOMAINS = [
+  { id: "育児",             label: "育児",             emoji: "🧒" },
+  { id: "子の個性",         label: "子の個性",         emoji: "🌱" },
+  { id: "お金",             label: "お金",             emoji: "💰" },
+  { id: "コミュニケーション", label: "コミュニケーション", emoji: "💬" },
+];
+
+// ============================================================
 // ユーティリティ
 // ============================================================
 
@@ -24,9 +34,29 @@ function getUserStep(session, userId) {
   return null;
 }
 
-function stepLabel(step) {
-  const map = { step1: 1, step2: 2, step3: 3, step4: 4, completed: 4 };
-  return map[step] ?? 0;
+function getPartnerStep(session, userId) {
+  if (!session || !userId) return null;
+  if (session.user1_id === userId) return session.user2_current_step;
+  if (session.user2_id === userId) return session.user1_current_step;
+  return null;
+}
+
+/**
+ * セッションの実施状態を返す
+ * "new" | "in_progress" | "one_done" | "both_done"
+ */
+function getSessionStatus(session, userId) {
+  const myStep      = getUserStep(session, userId);
+  const partnerStep = getPartnerStep(session, userId);
+  const myDone      = myStep === "completed";
+  const partnerDone = partnerStep === "completed";
+
+  if (myDone && partnerDone) return "both_done";
+  if (myDone || partnerDone) return "one_done";
+
+  const hasMyAnswers = (session.answers || []).some((a) => a.user_id === userId);
+  if (hasMyAnswers || session.status === "in_progress") return "in_progress";
+  return "new";
 }
 
 // ============================================================
@@ -34,94 +64,71 @@ function stepLabel(step) {
 // ============================================================
 
 function SessionCard({ session, userId, onPress }) {
-  const myStep      = getUserStep(session, userId) || "step1";
-  const scenarioTitle = session.scenario?.scene_text?.slice(0, 30) + "…" || "シナリオ";
+  const status = getSessionStatus(session, userId);
+  const scenarioTitle = session.scenario?.scene_text?.slice(0, 32) + "…" || "シナリオ";
   const date          = formatDate(session.delivered_at || session.created_at);
 
-  // 自分の回答済みステップ数
-  const myAnswers     = (session.answers || []).filter((a) => a.user_id === userId);
+  const myAnswers      = (session.answers || []).filter((a) => a.user_id === userId);
   const partnerAnswers = (session.answers || []).filter((a) => a.user_id !== userId);
-  const myStepNum     = myAnswers.length;
-  const partnerStepNum = partnerAnswers.length;
 
-  if (session.status === "new" || (!myAnswers.length)) {
-    return (
-      <motion.div
-        className="bg-yellow-50 rounded-2xl p-4 border border-yellow-100"
-        whileTap={{ scale: 0.98 }}
-      >
-        <div className="flex items-start gap-3 mb-3">
-          <span className="text-2xl">🆕</span>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-800 text-sm leading-tight">{scenarioTitle}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{date}</p>
-          </div>
-        </div>
-        <button
-          onClick={onPress}
-          className="w-full bg-yellow-400 text-white font-semibold py-2.5 rounded-xl text-sm"
-        >
-          一人で試してみる
-        </button>
-      </motion.div>
-    );
-  }
+  // 状態バッジ
+  const badges = {
+    new:       { emoji: "🆕", bg: "bg-yellow-50",  border: "border-yellow-100",  tag: "未実施",          tagColor: "bg-yellow-100 text-yellow-700" },
+    in_progress:{ emoji: "📝", bg: "bg-orange-50", border: "border-orange-100",  tag: "途中",            tagColor: "bg-orange-100 text-orange-700" },
+    one_done:  { emoji: "👤", bg: "bg-blue-50",    border: "border-blue-100",    tag: "一人だけ完了",    tagColor: "bg-blue-100 text-blue-700" },
+    both_done: { emoji: "✅", bg: "bg-gray-50",    border: "border-gray-200",    tag: "ふたりとも完了",  tagColor: "bg-green-100 text-green-700" },
+  };
+  const badge = badges[status] || badges.new;
 
-  if (session.status === "completed") {
-    return (
-      <motion.div
-        className="bg-gray-50 rounded-2xl p-4 border border-gray-200"
-        whileTap={{ scale: 0.98 }}
-      >
-        <div className="flex items-start gap-3 mb-3">
-          <span className="text-2xl">✅</span>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-700 text-sm leading-tight">{scenarioTitle}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{date}</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={onPress}
-            className="flex-1 bg-gray-200 text-gray-600 font-medium py-2.5 rounded-xl text-sm"
-          >
-            振り返りを見る
-          </button>
-          <button
-            onClick={onPress}
-            className="flex-1 border border-gray-300 text-gray-600 font-medium py-2.5 rounded-xl text-sm"
-          >
-            もう一度やる
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
+  const buttonLabel = {
+    new:        "やってみる",
+    in_progress: "続きをやる",
+    one_done:   "自分の回答を見る / 続きをやる",
+    both_done:  "振り返りを見る",
+  }[status];
 
-  // in_progress
+  const buttonClass = {
+    new:        "bg-yellow-400 text-white",
+    in_progress:"bg-orange-400 text-white",
+    one_done:   "bg-blue-400 text-white",
+    both_done:  "bg-gray-200 text-gray-600",
+  }[status];
+
   return (
     <motion.div
-      className="bg-orange-50 rounded-2xl p-4 border border-orange-100"
+      className={`${badge.bg} rounded-2xl p-4 border ${badge.border}`}
       whileTap={{ scale: 0.98 }}
     >
       <div className="flex items-start gap-3 mb-2">
-        <span className="text-2xl">👁️</span>
+        <span className="text-2xl">{badge.emoji}</span>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-800 text-sm leading-tight">{scenarioTitle}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{date} · Step {myStepNum}/4</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-xs text-gray-400">{date}</p>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${badge.tagColor}`}>
+              {badge.tag}
+            </span>
+          </div>
         </div>
       </div>
-      <div className="flex gap-2 text-xs text-gray-500 mb-3">
-        <span>あなた: Step {myStepNum}/4</span>
-        {partnerStepNum > 0 && (
-          <span>· パートナー: Step {partnerStepNum}/4</span>
-        )}
-      </div>
+
+      {/* 進行状況バー（一人以上が途中/完了の場合） */}
+      {(status === "in_progress" || status === "one_done" || status === "both_done") && (
+        <div className="flex gap-2 text-xs text-gray-500 mb-3">
+          {myAnswers.length > 0 && (
+            <span>自分: {myAnswers.length}step{status === "one_done" && getUserStep(session, userId) === "completed" ? "（完了）" : ""}</span>
+          )}
+          {partnerAnswers.length > 0 && (
+            <span>· パートナー: {partnerAnswers.length}step{getPartnerStep(session, userId) === "completed" ? "（完了）" : ""}</span>
+          )}
+        </div>
+      )}
+
       <button
         onClick={onPress}
-        className="w-full bg-orange-400 text-white font-semibold py-2.5 rounded-xl text-sm"
+        className={`w-full font-semibold py-2.5 rounded-xl text-sm ${buttonClass}`}
       >
-        続きをやる
+        {buttonLabel}
       </button>
     </motion.div>
   );
@@ -134,17 +141,17 @@ const TUTORIAL_STEPS = [
   {
     emoji: "🐾",
     title: "けみーへようこそ！",
-    body: "けみーは、パートナーとの子育て対話を深めるためのアプリにゃ。\nシナリオに答えながら、お互いの気持ちや価値観を発見できるにゃ🐾",
+    body: "けみーは、パートナーとの対話を深めるためのアプリにゃ。\nシナリオに答えながら、お互いの気持ちや価値観を発見できるにゃ🐾",
   },
   {
     emoji: "💬",
     title: "こんな流れで進むにゃ",
-    body: "①シナリオを読む\n②自分の感情・考えを4ステップで答える\n③パートナーの答えと比べてみる\n④けみーがふたりへのメッセージを届けるにゃ🐾",
+    body: "①シナリオを読む\n②自分の気持ち・考えを質問に答えながら整理する\n③パートナーの答えと比べてみる\n④けみーがふたりへのメッセージを届けるにゃ🐾",
   },
   {
-    emoji: "✨",
-    title: "シナリオは少しずつ増えるにゃ",
-    body: "最初は3つのシナリオが届くにゃ。\n一番気になるものを選んで始めてみてにゃ🐾\n1つ終えるたびに新しいシナリオが届くにゃ！",
+    emoji: "🗂️",
+    title: "ドメインでシナリオを切り替えにゃ",
+    body: "「育児」「子の個性」「お金」「コミュニケーション」の4つのテーマがあるにゃ。\n最初は育児から3つ届くにゃ。1つ終えると全シナリオが一気に解放されるにゃ🐾",
   },
 ];
 
@@ -210,7 +217,6 @@ function ResetAccountButton() {
     setLoading(true);
     try {
       await api.resetAccount(idToken);
-      // ストアをクリアしてオンボーディングに戻す
       setUser(null);
       setHousehold(null);
       setPartner(null);
@@ -277,6 +283,7 @@ export default function HomePage() {
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [sessionError,    setSessionError]    = useState(null);
   const [copiedCode,      setCopiedCode]      = useState(false);
+  const [activeDomain,    setActiveDomain]    = useState("育児");
 
   const liffId   = import.meta.env.VITE_LIFF_ID;
   const lineOaId = import.meta.env.VITE_LINE_OA_ID;
@@ -307,7 +314,6 @@ export default function HomePage() {
       .finally(() => setLoadingSessions(false));
   }
 
-  // セッション一覧取得
   useEffect(() => {
     fetchSessions();
   }, [household?.id]);
@@ -329,6 +335,11 @@ export default function HomePage() {
     return () => supabase.removeChannel(channel);
   }, [household?.id]);
 
+  // アクティブドメインのセッションだけ表示
+  const filteredSessions = (sessions || []).filter(
+    (s) => (s.scenario?.domain ?? "育児") === activeDomain
+  );
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* チュートリアルオーバーレイ（初回のみ） */}
@@ -347,6 +358,25 @@ export default function HomePage() {
         )}
       </header>
 
+      {/* ドメインタブ（横スクロール） */}
+      <div className="bg-white border-b border-gray-100 px-4 overflow-x-auto">
+        <div className="flex gap-1 min-w-max py-2">
+          {DOMAINS.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => setActiveDomain(d.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors
+                ${activeDomain === d.id
+                  ? "bg-orange-400 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              <span>{d.emoji}</span>
+              <span>{d.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-8">
         {/* パートナー未参加バナー */}
         {!partner && (
@@ -361,7 +391,6 @@ export default function HomePage() {
               一緒にやるとお互いの答えが比べられるにゃ🐾
             </p>
 
-            {/* 招待コード表示 */}
             <div className="bg-white rounded-xl px-3 py-2 mb-3 flex items-center justify-between border border-green-200">
               <div>
                 <p className="text-xs text-gray-400">招待コード</p>
@@ -409,13 +438,15 @@ export default function HomePage() {
               再試行にゃ
             </button>
           </div>
-        ) : sessions.length === 0 ? (
+        ) : filteredSessions.length === 0 ? (
           <div className="text-center text-gray-400 text-sm py-16">
-            シナリオの準備中にゃ…少し待ってにゃ🐾
+            {sessions.length === 0
+              ? "シナリオの準備中にゃ…少し待ってにゃ🐾"
+              : `「${activeDomain}」のシナリオはまだないにゃ🐾\n育児シナリオを1つ完了すると解放されるにゃ！`}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {sessions.map((s) => (
+            {filteredSessions.map((s) => (
               <SessionCard
                 key={s.id}
                 session={s}
@@ -426,7 +457,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* リセットボタン（テスト用） */}
         <ResetAccountButton />
       </div>
     </div>

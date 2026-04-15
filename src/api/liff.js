@@ -13,6 +13,7 @@ import { generateCoupleReflection } from "../ai/generateCoupleReflection.js";
 import { generateChildLensStepAOptions } from "../ai/generateChildLensStepA.js";
 import { generateChildLensStepDOptions } from "../ai/generateChildLensStepD.js";
 import { generateChildLensReflection, generateChildLensCoupleReflection } from "../ai/generateChildLensReflection.js";
+import { generateGeneralStepOptions, generateGeneralReflection, generateGeneralCoupleReflection } from "../ai/generateGeneral.js";
 import { callClaude } from "../ai/claude.js";
 
 export const liffRouter = Router();
@@ -169,20 +170,13 @@ async function deliverSessions(householdId, birthYear, birthMonth, hasSiblings, 
       ...(user1Id ? { user1_id: user1Id } : {}),
     }));
   } else {
-    // 2回目以降: session_type 交互 ＋ 同カテゴリ回避 ＋ ランダム
-    const nextType = lastSessionType === "parent" ? "child_lens" : "parent";
-    const altTypeCandidates = candidates.filter((s) => s.session_type === nextType);
-    const typePool = altTypeCandidates.length > 0 ? altTypeCandidates : candidates;
-    const diffCategory = typePool.filter((s) => s.category !== lastCategory);
-    const pool = diffCategory.length > 0 ? diffCategory : typePool;
-    const selected = pool[Math.floor(Math.random() * pool.length)];
-
-    toInsert = [{
+    // 2回目以降: 未配信の全シナリオを一括解放
+    toInsert = candidates.map((s) => ({
       household_id: householdId,
-      scenario_id: selected.id,
+      scenario_id: s.id,
       status: "new",
       ...(user1Id ? { user1_id: user1Id } : {}),
-    }];
+    }));
   }
 
   await supabase.from("liff_sessions").insert(toInsert);
@@ -410,7 +404,7 @@ liffRouter.get("/sessions", async (req, res) => {
       .from("liff_sessions")
       .select(`
         *,
-        scenario:scenes(id, scene_text, category, age_group)
+        scenario:scenes(id, scene_text, category, age_group, session_type, domain)
       `)
       .eq("household_id", householdId)
       .order("delivered_at", { ascending: false });
@@ -482,6 +476,29 @@ liffRouter.get("/sessions/:id/options", async (req, res) => {
 
     const sceneText  = session.scenario.scene_text;
     const sessionType = session.scenario.session_type || "parent";
+
+    // ============================================================
+    // general セッション用選択肢生成（お金・コミュニケーションなど）
+    // ============================================================
+    if (sessionType === "general") {
+      const { data: prevAnswers } = await supabase
+        .from("session_answers")
+        .select("step, answer")
+        .eq("session_id", req.params.id)
+        .eq("user_id", userId);
+      const byStep = Object.fromEntries((prevAnswers || []).map((a) => [a.step, a.answer]));
+
+      const step1Action = byStep.step1?.action || "";
+      const step2Reason = byStep.step2?.reason || "";
+
+      const { question, options } = await generateGeneralStepOptions({
+        sceneText,
+        step,
+        step1Action,
+        step2Reason,
+      });
+      return res.json({ options, question });
+    }
 
     // ============================================================
     // 子どもレンズ (child_lens) セッション用選択肢生成
@@ -640,11 +657,15 @@ liffRouter.post("/sessions/:id/answer", async (req, res) => {
     // セッションの現在ステップを更新
     const { data: session } = await supabase
       .from("liff_sessions")
-      .select("user1_id, user2_id, user1_current_step, user2_current_step, status")
+      .select("user1_id, user2_id, user1_current_step, user2_current_step, status, scenario:scenes(session_type)")
       .eq("id", sessionId)
       .single();
 
-    const STEPS = ["step1", "step2", "step3", "step4"];
+    const sessionType = session.scenario?.session_type || "parent";
+    // general タイプは 3 ステップ（step1→step2→step3→completed）
+    const STEPS = sessionType === "general"
+      ? ["step1", "step2", "step3"]
+      : ["step1", "step2", "step3", "step4"];
     const nextStep = STEPS[STEPS.indexOf(step) + 1] || "completed";
 
     // user1_id が未設定のセッション（旧データ）は動的に割り当て
@@ -737,7 +758,41 @@ liffRouter.post("/sessions/:id/complete", async (req, res) => {
     let myReflectionText = null;
     let coupleReflectionText = null;
 
-    if (sessionType === "child_lens") {
+    if (sessionType === "general") {
+      // ── general 個別リフレクション（お金・コミュニケーションなど）──
+      const actionChoice = myAns.step1?.action || "";
+      const reasonChoice = myAns.step2?.reason || "";
+      const valueChoice  = myAns.step3?.value  || "";
+
+      if (actionChoice) {
+        myReflectionText = await generateGeneralReflection({
+          sceneText,
+          actionChoice,
+          reasonChoice,
+          valueChoice,
+          userName: myName,
+        });
+      }
+
+      // ── general カップルリフレクション ──
+      if (partnerDone && byUser[partnerId]) {
+        const partnerAns = byUser[partnerId];
+        const u1Ans  = isUser1 ? myAns      : partnerAns;
+        const u2Ans  = isUser1 ? partnerAns : myAns;
+
+        coupleReflectionText = await generateGeneralCoupleReflection({
+          sceneText,
+          user1Name:   isUser1 ? myName      : partnerName,
+          user1Action: u1Ans.step1?.action || "",
+          user1Reason: u1Ans.step2?.reason || "",
+          user1Value:  u1Ans.step3?.value  || "",
+          user2Name:   isUser1 ? partnerName : myName,
+          user2Action: u2Ans.step1?.action || "",
+          user2Reason: u2Ans.step2?.reason || "",
+          user2Value:  u2Ans.step3?.value  || "",
+        });
+      }
+    } else if (sessionType === "child_lens") {
       // ── 子どもレンズ 個別リフレクション ──
       const behaviorChoice = myAns.step1?.behavior || "";
       const reasonType     = myAns.step2?.reasonType || "";
