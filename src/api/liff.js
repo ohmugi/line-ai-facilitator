@@ -1,7 +1,6 @@
 // src/api/liff.js
 // LIFF Web App 用 API ルーター
 import { Router } from "express";
-import axios from "axios";
 import { supabase } from "../supabase/client.js";
 import { generateStep1Options } from "../ai/generateStep1.js";
 import { generateStepActionOptions } from "../ai/generateStepAction.js";
@@ -24,15 +23,24 @@ export const liffRouter = Router();
 
 /** LIFF ID トークンを LINE API で検証し { lineUserId, displayName } を返す */
 async function verifyLiffToken(idToken) {
-  const { data } = await axios.post(
-    "https://api.line.me/oauth2/v2.1/verify",
-    new URLSearchParams({
-      id_token: idToken,
-      client_id: process.env.LIFF_CHANNEL_ID,
-    }),
-    { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-  );
-  return { lineUserId: data.sub, displayName: data.name };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000); // 10秒タイムアウト
+  try {
+    const res = await fetch("https://api.line.me/oauth2/v2.1/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        id_token: idToken,
+        client_id: process.env.LIFF_CHANNEL_ID,
+      }).toString(),
+      signal: controller.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || data.error || `LINE API error ${res.status}`);
+    return { lineUserId: data.sub, displayName: data.name };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
