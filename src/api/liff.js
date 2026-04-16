@@ -408,6 +408,31 @@ liffRouter.get("/sessions", async (req, res) => {
     const { householdId, userId } = req.query;
     if (!householdId) return res.status(400).json({ error: "householdId required" });
 
+    // 既存セッションが1件以上あれば、未配信シナリオを自動同期（新ドメイン追加対応）
+    const { data: household } = await supabase
+      .from("liff_households")
+      .select("child_birth_year, child_birth_month, has_siblings")
+      .eq("id", householdId)
+      .maybeSingle();
+
+    if (household) {
+      const { count } = await supabase
+        .from("liff_sessions")
+        .select("id", { count: "exact", head: true })
+        .eq("household_id", householdId);
+
+      // 初回配信済み（count > 0）の場合のみ自動同期
+      if (count > 0) {
+        await deliverSessions(
+          householdId,
+          household.child_birth_year,
+          household.child_birth_month,
+          household.has_siblings,
+          userId || null
+        );
+      }
+    }
+
     const { data: sessions, error } = await supabase
       .from("liff_sessions")
       .select(`
