@@ -1,42 +1,19 @@
 // src/line/reply.js
 
-import axios from "axios";
-
 export async function replyText(replyToken, text) {
-  await axios.post(
-    "https://api.line.me/v2/bot/message/reply",
-    {
-      replyToken,
-      messages: [
-        {
-          type: "text",
-          text: text,
-        },
-      ],
+  const res = await fetch("https://api.line.me/v2/bot/message/reply", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
     },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+    body: JSON.stringify({
+      replyToken,
+      messages: [{ type: "text", text }],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("[replyText ERROR]", err);
+  }
 }
-
-// export async function replyTextWithQuickReply(replyToken, text, options = []) {
-//   return client.replyMessage(replyToken, {
-   //  type: "text",
- //    text,
- //    quickReply: {
- //      items: options.map(opt => ({
- //        type: "action",
- //        action: {
- //          type: "message",
- //          label: opt,
- //          text: opt
- //        }
- //      }))
- //    }
- //  });
-// }
-

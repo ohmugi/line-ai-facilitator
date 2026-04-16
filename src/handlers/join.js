@@ -1,6 +1,5 @@
 // src/handlers/join.js
 import crypto from "crypto";
-import axios from "axios";
 import { pushMessage } from "../line/push.js";
 import { startFirstSceneByPush } from "../logic/startFirstSceneByPush.js";
 
@@ -25,9 +24,13 @@ export async function handleJoin({ event, householdId, replyToken, startSession,
 
   // ★ Step1: 自己紹介（datetimepicker付き）
   const today = new Date().toISOString().split("T")[0];
-  await axios.post(
-    "https://api.line.me/v2/bot/message/reply",
-    {
+  const replyRes = await fetch("https://api.line.me/v2/bot/message/reply", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
       replyToken,
       messages: [{
         type: "text",
@@ -84,14 +87,12 @@ Kemyがシナリオを出す
           }]
         }
       }]
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      }
-    }
-  );
+    }),
+  });
+  if (!replyRes.ok) {
+    const err = await replyRes.text();
+    console.error("[handleJoin reply ERROR]", err);
+  }
   
   // ★ memberJoined が userId を確定してからシナリオを送るため、フラグだけ立てる
   session.pendingStart = true;

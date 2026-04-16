@@ -3,15 +3,25 @@
 
 const BASE = `${import.meta.env.VITE_API_BASE_URL || ""}/api/liff`;
 
-async function request(method, path, body, idToken) {
+async function request(method, path, body, idToken, _retries = 1) {
   const headers = { "Content-Type": "application/json" };
   if (idToken) headers["x-liff-id-token"] = idToken;
 
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (networkErr) {
+    // ネットワークエラー（サーバー未起動・コールドスタート等）はリトライ
+    if (_retries > 0) {
+      await new Promise((r) => setTimeout(r, 3000));
+      return request(method, path, body, idToken, _retries - 1);
+    }
+    throw new Error("サーバーに接続できませんでした。しばらく待ってから再試行してにゃ🐾");
+  }
 
   const text = await res.text();
   let json;
