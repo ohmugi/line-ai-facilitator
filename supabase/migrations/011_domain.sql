@@ -12,6 +12,7 @@ ALTER TABLE scenes ADD CONSTRAINT scenes_session_type_check
   CHECK (session_type IN ('parent', 'child_lens', 'general'));
 
 -- ============================================================
+
 -- 1. domain カラムを追加
 -- ============================================================
 ALTER TABLE scenes ADD COLUMN IF NOT EXISTS domain text;
