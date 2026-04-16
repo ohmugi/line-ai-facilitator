@@ -3,6 +3,7 @@
 -- お金・コミュニケーションドメインの general セッションシナリオを投入
 
 -- ============================================================
+
 -- 0. session_type の CHECK 制約を拡張（'general' を追加）
 --    005_child_lens.sql で ('parent','child_lens') のみ許可していたため更新
 -- ============================================================
@@ -11,6 +12,8 @@ ALTER TABLE scenes ADD CONSTRAINT scenes_session_type_check
   CHECK (session_type IN ('parent', 'child_lens', 'general'));
 
 -- ============================================================
+=======
+
 -- 1. domain カラムを追加
 -- ============================================================
 ALTER TABLE scenes ADD COLUMN IF NOT EXISTS domain text;
