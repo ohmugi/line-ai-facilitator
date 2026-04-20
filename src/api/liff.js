@@ -204,13 +204,27 @@ liffRouter.post("/onboarding", async (req, res) => {
     }
     const { lineUserId, displayName } = await verifyLiffToken(liffIdToken);
     console.log("[onboarding] lineUserId:", lineUserId, "displayName:", displayName);
+ claude/review-codebase-status-TQflc
+
+    const householdFields = { child_birth_year: childBirthYear, child_birth_month: childBirthMonth };
+    if (hasSiblings !== undefined && hasSiblings !== null) householdFields.has_siblings = hasSiblings;
+
 
     // 既存ユーザー確認
     const { data: existingUser, error: existingErr } = await supabase
       .from("liff_users")
-      .select("*, liff_households(*)")
+      .select("id, household_id, line_user_id, display_name, role, created_at")
       .eq("line_user_id", lineUserId)
       .maybeSingle();
+ claude/review-codebase-status-TQflc
+    console.log("[onboarding] existingUser:", existingUser?.id, "household_id:", existingUser?.household_id);
+
+    let household = null;
+
+    if (existingUser?.household_id) {
+      // 既存世帯を更新（世帯が存在する場合のみ）
+      const { data: updated } = await supabase
+
     console.log("[onboarding] existingUser:", existingUser?.id, "existingErr:", existingErr?.message);
 
     if (existingUser?.household_id) {
@@ -223,10 +237,50 @@ liffRouter.post("/onboarding", async (req, res) => {
       if (hasSiblings !== undefined && hasSiblings !== null) updateFields.has_siblings = hasSiblings;
 
       const { data: household, error: hhUpdateErr } = await supabase
+
         .from("liff_households")
-        .update(updateFields)
+        .update({ ...householdFields, updated_at: new Date().toISOString() })
         .eq("id", existingUser.household_id)
         .select()
+ claude/review-codebase-status-TQflc
+        .maybeSingle();
+      console.log("[onboarding] household update result:", updated?.id);
+      household = updated;
+    }
+
+    if (!household) {
+      // 世帯がない or 更新対象が存在しなかった → 新規作成
+      const { data: created, error: hhErr } = await supabase
+        .from("liff_households")
+        .insert(householdFields)
+        .select()
+        .single();
+      console.log("[onboarding] household insert:", created?.id, "err:", hhErr?.message);
+      if (hhErr) throw hhErr;
+      if (!created) throw new Error("世帯の作成に失敗しました。再度お試しください。");
+      household = created;
+
+      if (existingUser) {
+        // 既存ユーザーの household_id を新世帯に付け替え
+        await supabase.from("liff_users").update({ household_id: household.id }).eq("id", existingUser.id);
+      }
+    }
+
+    let user = existingUser;
+
+    if (!existingUser) {
+      // 完全新規ユーザー作成
+      const { data: created, error: userErr } = await supabase
+        .from("liff_users")
+        .insert({ line_user_id: lineUserId, household_id: household.id, display_name: displayName, role: "inviter" })
+        .select()
+        .single();
+      console.log("[onboarding] user insert:", created?.id, "err:", userErr?.message);
+      if (userErr) throw userErr;
+      if (!created) throw new Error("ユーザーの作成に失敗しました。再度お試しください。");
+      user = created;
+    }
+
         .single();
       console.log("[onboarding] household update:", household?.id, "err:", hhUpdateErr?.message);
       if (hhUpdateErr) throw hhUpdateErr;
@@ -268,6 +322,7 @@ liffRouter.post("/onboarding", async (req, res) => {
     console.log("[onboarding] user insert:", user?.id, "err:", userErr?.message);
     if (userErr) throw userErr;
     if (!user) throw new Error("ユーザーの作成に失敗しました。再度お試しください。");
+
 
     // セッション配信
     await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings, user.id);
