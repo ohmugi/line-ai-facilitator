@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import liff from "@line/liff";
 import { useAppStore } from "../stores/appStore";
 import { api } from "../api/client";
 
@@ -37,6 +38,11 @@ function calcAgeGroup(year, month) {
   return "universal";
 }
 
+function isTokenExpiredError(msg = "") {
+  const m = msg.toLowerCase();
+  return m.includes("expired") || m.includes("invalid_grant") || m.includes("token");
+}
+
 export default function OnboardingPage() {
   const navigate    = useNavigate();
   const idToken     = useAppStore((s) => s.idToken);
@@ -47,8 +53,9 @@ export default function OnboardingPage() {
   const [year,        setYear]        = useState("");
   const [month,       setMonth]       = useState("");
   const [hasSiblings, setHasSiblings] = useState(null); // null=未選択, true/false
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
+  const [tokenExpired, setTokenExpired] = useState(false);
 
   // 招待コード入力モード
   const [showCodeEntry, setShowCodeEntry] = useState(false);
@@ -56,23 +63,32 @@ export default function OnboardingPage() {
   const [codeLoading,   setCodeLoading]   = useState(false);
   const [codeError,     setCodeError]     = useState(null);
 
+  function getFreshToken() {
+    return liff.getIDToken() || idToken;
+  }
+
   const handleJoinByCode = async () => {
     const code = inviteCode.trim();
     if (!code) return;
-    if (!idToken) {
+    const token = getFreshToken();
+    if (!token) {
       setCodeError("LINEアプリから開いてくださいにゃ🐾");
       return;
     }
     setCodeLoading(true);
     setCodeError(null);
     try {
-      const { user, household, partner } = await api.joinInvite(idToken, code);
+      const { user, household, partner } = await api.joinInvite(token, code);
       setUser(user);
       setHousehold(household);
       setPartner(partner);
       navigate("/home");
     } catch (err) {
-      setCodeError(err.message);
+      if (isTokenExpiredError(err.message)) {
+        setCodeError("セッションが切れました。アプリを閉じて開き直してにゃ🐾");
+      } else {
+        setCodeError(err.message);
+      }
     } finally {
       setCodeLoading(false);
     }
@@ -83,7 +99,8 @@ export default function OnboardingPage() {
 
   const handleSubmit = async () => {
     if (!year || !month) return;
-    if (!idToken) {
+    const token = getFreshToken();
+    if (!token) {
       setError("LINEアプリから開いてくださいにゃ🐾");
       return;
     }
@@ -91,7 +108,7 @@ export default function OnboardingPage() {
     setError(null);
     try {
       const { user, household } = await api.onboarding(
-        idToken,
+        token,
         Number(year),
         Number(month),
         hasSiblings,
@@ -100,7 +117,12 @@ export default function OnboardingPage() {
       setHousehold(household);
       navigate("/invite-generate");
     } catch (err) {
-      setError(err.message);
+      if (isTokenExpiredError(err.message)) {
+        setTokenExpired(true);
+        setError("セッションが切れました。再読み込みしてにゃ🐾");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -246,7 +268,17 @@ export default function OnboardingPage() {
         )}
 
         {error && (
-          <p className="text-red-500 text-sm mb-4 text-center">{error}</p>
+          <div className="mb-4 text-center">
+            <p className="text-red-500 text-sm">{error}</p>
+            {tokenExpired && (
+              <button
+                onClick={() => liff.login()}
+                className="mt-2 text-xs bg-orange-400 text-white px-4 py-2 rounded-xl font-medium"
+              >
+                再ログインする
+              </button>
+            )}
+          </div>
         )}
 
         <button
