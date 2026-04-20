@@ -203,13 +203,15 @@ liffRouter.post("/onboarding", async (req, res) => {
       return res.status(400).json({ error: "LINEアプリからアクセスしてくださいにゃ🐾" });
     }
     const { lineUserId, displayName } = await verifyLiffToken(liffIdToken);
+    console.log("[onboarding] lineUserId:", lineUserId, "displayName:", displayName);
 
     // 既存ユーザー確認
-    const { data: existingUser } = await supabase
+    const { data: existingUser, error: existingErr } = await supabase
       .from("liff_users")
       .select("*, liff_households(*)")
       .eq("line_user_id", lineUserId)
       .maybeSingle();
+    console.log("[onboarding] existingUser:", existingUser?.id, "existingErr:", existingErr?.message);
 
     if (existingUser?.household_id) {
       // 既存: 生年月を更新してセッション追加配信
@@ -218,14 +220,17 @@ liffRouter.post("/onboarding", async (req, res) => {
         child_birth_month: childBirthMonth,
         updated_at: new Date().toISOString(),
       };
-      if (hasSiblings !== undefined) updateFields.has_siblings = hasSiblings;
+      if (hasSiblings !== undefined && hasSiblings !== null) updateFields.has_siblings = hasSiblings;
 
-      const { data: household } = await supabase
+      const { data: household, error: hhUpdateErr } = await supabase
         .from("liff_households")
         .update(updateFields)
         .eq("id", existingUser.household_id)
         .select()
         .single();
+      console.log("[onboarding] household update:", household?.id, "err:", hhUpdateErr?.message);
+      if (hhUpdateErr) throw hhUpdateErr;
+      if (!household) throw new Error("世帯情報の更新に失敗しました。再度お試しください。");
 
       await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings, existingUser.id);
 
@@ -238,14 +243,16 @@ liffRouter.post("/onboarding", async (req, res) => {
 
     // 新規: household 作成
     const newHouseholdData = { child_birth_year: childBirthYear, child_birth_month: childBirthMonth };
-    if (hasSiblings !== undefined) newHouseholdData.has_siblings = hasSiblings;
+    if (hasSiblings !== undefined && hasSiblings !== null) newHouseholdData.has_siblings = hasSiblings;
 
     const { data: household, error: hhErr } = await supabase
       .from("liff_households")
       .insert(newHouseholdData)
       .select()
       .single();
+    console.log("[onboarding] household insert:", household?.id, "err:", hhErr?.message);
     if (hhErr) throw hhErr;
+    if (!household) throw new Error("世帯の作成に失敗しました。再度お試しください。");
 
     // ユーザー作成
     const { data: user, error: userErr } = await supabase
@@ -258,7 +265,9 @@ liffRouter.post("/onboarding", async (req, res) => {
       })
       .select()
       .single();
+    console.log("[onboarding] user insert:", user?.id, "err:", userErr?.message);
     if (userErr) throw userErr;
+    if (!user) throw new Error("ユーザーの作成に失敗しました。再度お試しください。");
 
     // セッション配信
     await deliverSessions(household.id, childBirthYear, childBirthMonth, household.has_siblings, user.id);
