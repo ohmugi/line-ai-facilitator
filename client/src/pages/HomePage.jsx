@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Copy, MessageCircle } from "lucide-react";
+import liff from "@line/liff";
 import { useAppStore } from "../stores/appStore";
 import { api } from "../api/client";
 import { supabase } from "../api/supabase";
@@ -210,20 +211,25 @@ function ResetAccountButton() {
   const setHousehold = useAppStore((s) => s.setHousehold);
   const setPartner = useAppStore((s) => s.setPartner);
   const setSessions = useAppStore((s) => s.setSessions);
+  const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   async function handleReset() {
     setLoading(true);
+    setError(null);
     try {
-      await api.resetAccount(idToken);
+      const token = liff.getIDToken() || idToken;
+      await api.resetAccount(token);
       setUser(null);
       setHousehold(null);
       setPartner(null);
       setSessions([]);
       localStorage.removeItem("kemy_tutorial_seen");
+      navigate("/onboarding", { replace: true });
     } catch (err) {
-      alert(`リセット失敗: ${err.message}`);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -234,6 +240,7 @@ function ResetAccountButton() {
       <div className="mt-8 p-4 bg-red-50 rounded-2xl border border-red-100 text-center">
         <p className="text-sm text-red-700 font-semibold mb-1">本当にリセットしますか？</p>
         <p className="text-xs text-red-500 mb-3">世帯・セッション・回答がすべて削除されます</p>
+        {error && <p className="text-xs text-red-600 mb-2">エラー: {error}</p>}
         <div className="flex gap-2 justify-center">
           <button
             onClick={handleReset}
