@@ -1,0 +1,2 @@
+# onboardingハンドラはmainからのマージ時に常にclaudeブランチ版を使う
+src/api/liff.js merge=ours
